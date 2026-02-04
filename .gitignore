@@ -20,8 +20,17 @@ coverage/
 .env.test.local
 .env.production.local
 
-# Keep preprod config for deployment
-!.env.preprod
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE files
 .vscode/

@@ -1,0 +1,6 @@
+masumi
+python-dotenv
+aiohttp>=3.8.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0

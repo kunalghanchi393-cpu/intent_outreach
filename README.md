@@ -1,277 +1,241 @@
 # Intent-Driven Cold Outreach Agent
 
-A production-ready AI system that generates personalized, human-sounding outreach messages through a structured 7-step reasoning workflow. The system prioritizes quality and relevance over persuasion or scale, ensuring predictable, explainable, and business-safe behavior.
+A production-ready AI agent that generates personalized cold outreach messages based on intent signals, featuring a 7-step reasoning workflow and full Masumi network integration.
 
 ## 🚀 Quick Start
 
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.8+ and pip
+- Git
+
 ### Installation
+
 ```bash
+# Clone the repository
 git clone https://github.com/kp183/Intent-Driven-Cold-Outreach-Agent.git
 cd Intent-Driven-Cold-Outreach-Agent
-npm install
-```
 
-### Build & Run
-```bash
-# Build the application
+# Install Node.js dependencies
+npm install
+
+# Build the project
 npm run build
 
-# Start the server
+# Install Python dependencies for Masumi integration
+cd masumi-outreach-agent/masumi-agent
+pip install -r requirements.txt
+cd ../..
+```
+
+### Running the Services
+
+```bash
+# Terminal 1: Start Node.js outreach service (port 3000)
 npm start
 
-# Server will be available at http://localhost:3000
-```
-
-### Test the API
-```bash
-# Health check
-curl http://localhost:3000/health
-
-# Process outreach request
-curl -X POST http://localhost:3000/agent/outreach \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prospectData": {
-      "role": "VP of Engineering",
-      "companyContext": {
-        "name": "TechCorp Inc",
-        "industry": "Software",
-        "size": "medium"
-      },
-      "contactDetails": {
-        "name": "John Smith",
-        "email": "john.smith@techcorp.com"
-      }
-    },
-    "intentSignals": [
-      {
-        "type": "funding_event",
-        "description": "Company raised Series B funding",
-        "timestamp": "2024-01-15T00:00:00.000Z",
-        "relevanceScore": 0.9,
-        "source": "TechCrunch"
-      }
-    ]
-  }'
-```
-
-## 📋 Features
-
-### Core Capabilities
-- **7-Step Reasoning Workflow**: Structured processing from input to output
-- **Conservative Behavior**: Prioritizes safety and accuracy over persuasion
-- **Property-Based Testing**: 36 correctness properties ensure reliability
-- **Comprehensive Validation**: Input validation and error handling
-- **Structured Output**: Consistent JSON responses with confidence scoring
-- **Authenticity Filtering**: Avoids template-like or artificial language
-
-### API Endpoints
-- **`GET /health`** - Health check and system status
-- **`POST /agent/outreach`** - Main outreach processing endpoint
-
-### Performance
-- **Response Time**: 50-200ms average
-- **Memory Usage**: ~50MB baseline
-- **Concurrent Requests**: Up to 10 simultaneous
-- **Test Coverage**: 116 tests, 100% success rate
-
-## 🏗️ Architecture
-
-### System Components
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   HTTP Server   │───▶│  Reasoning Agent │───▶│ Message Output  │
-│   (Express)     │    │   (7-step flow)  │    │   (Structured)  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                        │                       │
-         ▼                        ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ Input Validator │    │ Signal Processor │    │ Output Assembly │
-│ Request/Response│    │ Hypothesis/Score │    │ Alternatives    │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-### 7-Step Workflow
-1. **Input Validation** - Validate prospect data and intent signals
-2. **Signal Interpretation** - Process and weight intent signals
-3. **Hypothesis Formation** - Form intent hypothesis from signals
-4. **Confidence Scoring** - Assign High/Medium/Low confidence
-5. **Strategy Selection** - Choose message strategy based on confidence
-6. **Message Generation** - Generate personalized message (≤120 words)
-7. **Authenticity Filtering** - Ensure human-like, non-template language
-8. **Output Assembly** - Structure final response with alternatives
-
-## 📊 API Reference
-
-### Request Format
-```typescript
-{
-  prospectData: {
-    role: string;                    // Job role
-    companyContext: {
-      name: string;                  // Company name
-      industry: string;              // Industry sector
-      size: "startup" | "small" | "medium" | "large" | "enterprise";
-    };
-    contactDetails: {
-      name: string;                  // Full name
-      email: string;                 // Email address
-    };
-  };
-  intentSignals: Array<{
-    type: "job_change" | "funding_event" | "technology_adoption" | "company_growth" | "industry_trend";
-    description: string;             // Signal description
-    timestamp: string;               // ISO date string
-    relevanceScore: number;          // 0-1 relevance score
-    source: string;                  // Signal source
-  }>;
-}
-```
-
-### Response Format
-```typescript
-{
-  success: boolean;
-  data: {
-    intentConfidence: "High" | "Medium" | "Low";
-    reasoningSummary: string;        // 1-2 sentence explanation
-    recommendedMessage: string;      // Primary message (≤120 words)
-    alternativeMessages: [string, string]; // Exactly 2 alternatives
-    suggestedFollowUpTiming: "immediate" | "one_week" | "two_weeks" | "one_month";
-    processingMetadata: {
-      executionTime: number;         // Processing time in ms
-      workflowSteps: string[];       // Executed workflow steps
-    };
-  };
-  timestamp: string;                 // Response timestamp
-}
-```
-
-## 🛠️ Development
-
-### Prerequisites
-- Node.js 16+ (recommended: 18+)
-- npm 8+
-- TypeScript 5.0+
-
-### Scripts
-```bash
-npm run build        # Compile TypeScript
-npm run build:prod   # Production build (lint + test + build)
-npm start           # Start production server
-npm run start:dev   # Start development server
-npm test            # Run all tests
-npm run test:watch  # Run tests in watch mode
-npm run lint        # Run ESLint
-npm run format      # Format code with Prettier
-```
-
-### Environment Variables
-```bash
-PORT=3000                    # Server port (default: 3000)
-NODE_ENV=production         # Environment (development/production)
-ENABLE_VERBOSE_LOGGING=false # Enable detailed logging
-PROCESSING_TIMEOUT=30000    # Request timeout in milliseconds
+# Terminal 2: Start Masumi agent (port 8080)
+cd masumi-outreach-agent/masumi-agent
+python main.py
 ```
 
 ### Testing
+
 ```bash
-# Run all tests (116 tests)
+# Run Node.js tests (116 tests)
 npm test
 
-# Run specific test categories
-npm test -- --testPathPattern="confidence-scorer"
-npm test -- --testPathPattern="integration"
-npm test -- --testPathPattern="property.test"
-
-# Run with coverage
-npm run test:coverage
+# Run MIP-003 compliance tests (5 tests)
+cd masumi-outreach-agent/masumi-agent
+python test_mip003.py
 ```
 
-## 🚀 Deployment
+## 🏗️ Architecture
 
-### Production Build
-```bash
-npm run build:prod  # Lint + Test + Build
-npm start          # Start server
-```
+### Node.js Service (Port 3000)
+Core outreach generation service with 7-step reasoning workflow:
 
-### Docker (Optional)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY dist/ ./dist/
-EXPOSE 3000
-CMD ["npm", "start"]
-```
+1. **Signal Interpretation** - Analyzes intent signals for relevance
+2. **Hypothesis Formation** - Forms outreach hypotheses based on signals
+3. **Strategy Selection** - Selects optimal messaging strategy
+4. **Message Generation** - Creates personalized outreach messages
+5. **Authenticity Filtering** - Validates message authenticity
+6. **Confidence Scoring** - Assigns confidence levels
+7. **Output Assembly** - Assembles final structured response
 
-### Environment Setup
-1. Copy `.env.example` to `.env`
-2. Configure environment variables
-3. Run `npm run build:prod`
-4. Deploy with `npm start`
+### Python Masumi Agent (Port 8080)
+MIP-003 compliant blockchain integration layer:
 
-## 📈 Performance & Monitoring
+- **Job Management** - Handles outreach requests as blockchain jobs
+- **Payment Processing** - Integrates with Masumi payment system
+- **Status Tracking** - Real-time job status updates
+- **Background Processing** - Async job processing pipeline
 
-### Metrics
-- **Uptime**: Health check at `/health`
-- **Response Times**: Built-in timing metrics
-- **Error Rates**: Structured error responses
-- **Memory Usage**: Monitor with standard Node.js tools
+## 📡 API Endpoints
 
-### Health Check Response
+### Node.js Service
+- `GET /health` - Health check
+- `POST /agent/outreach` - Generate outreach message
+
+### Masumi Agent (MIP-003 Compliant)
+- `POST /start_job` - Start outreach job
+- `GET /status?job_id={id}` - Get job status
+- `GET /availability` - Check service availability
+- `GET /input_schema` - Get input format
+- `GET /demo` - Get demo data
+- `POST /provide_input` - Provide additional input
+
+## 📊 Input Format
+
 ```json
 {
-  "status": "ok",
-  "service": "Intent-Driven Cold Outreach Agent",
-  "version": "1.0.0",
-  "environment": "production",
-  "health": "healthy"
+  "prospectData": {
+    "role": "VP of Engineering",
+    "companyContext": {
+      "name": "TechCorp Inc",
+      "industry": "Software",
+      "size": "medium"
+    },
+    "contactDetails": {
+      "name": "John Smith",
+      "email": "john.smith@techcorp.com"
+    }
+  },
+  "intentSignals": [
+    {
+      "type": "funding_event",
+      "description": "Company raised Series B funding",
+      "timestamp": "2024-01-15T00:00:00.000Z",
+      "relevanceScore": 0.9,
+      "source": "TechCrunch"
+    }
+  ]
 }
 ```
 
-## 🔒 Security
+## 📈 Output Format
 
-### Input Validation
-- JSON schema validation
-- Type checking and sanitization
-- Rate limiting protection
-- CORS configuration
+```json
+{
+  "success": true,
+  "data": {
+    "intentConfidence": "High",
+    "reasoningSummary": "Strong funding signals indicate expansion phase...",
+    "recommendedMessage": "Hi John,\n\nI saw that TechCorp Inc recently raised Series B funding...",
+    "alternativeMessages": ["Alternative 1...", "Alternative 2..."],
+    "suggestedFollowUpTiming": "one_week",
+    "processingMetadata": {
+      "executionTime": 45,
+      "workflowSteps": [...]
+    }
+  }
+}
+```
 
-### Error Handling
-- No stack traces in production
-- Structured error responses
-- Request timeout protection
-- Graceful failure handling
+## 🧪 Testing & Quality
+
+### Node.js Service
+- **116 tests** covering all components
+- **Property-based testing** with 36 properties
+- **Conservative behavior** validation
+- **Integration testing** for complete workflows
+
+### Masumi Integration
+- **5 MIP-003 compliance tests** (all passing)
+- **End-to-end workflow testing**
+- **Payment simulation testing**
+- **Error handling validation**
+
+### Signal Types Supported
+- `job_change` - Role changes, promotions
+- `funding_event` - Investment rounds, acquisitions
+- `technology_adoption` - Tech stack changes
+- `company_growth` - Expansion, hiring sprees
+- `industry_trend` - Market shifts, regulations
+
+## 🌐 Deployment
+
+### Environment Configuration
+
+**Node.js Service (.env.example):**
+```env
+NODE_ENV=production
+PORT=3000
+```
+
+**Masumi Agent (.env):**
+```env
+AGENT_IDENTIFIER=intent-driven-outreach-agent-v1
+PAYMENT_API_KEY=your-api-key
+SELLER_VKEY=your-vkey
+NETWORK=Preprod
+PORT=8080
+OUTREACH_SERVICE_URL=http://localhost:3000
+```
+
+### Production Deployment
+1. Deploy Node.js service to your preferred platform
+2. Deploy Python Masumi agent with environment variables
+3. Configure load balancers and health checks
+4. Register agent in Masumi marketplace
+
+## 📁 Project Structure
+
+```
+Intent-Driven-Cold-Outreach-Agent/
+├── src/                          # Node.js source code
+│   ├── reasoning-agent/          # Main workflow orchestrator
+│   ├── signal-interpreter/       # Intent signal analysis
+│   ├── message-generator/        # Message generation
+│   └── ...                       # Other components
+├── masumi-outreach-agent/        # Masumi integration
+│   └── masumi-agent/
+│       ├── agent.py              # MIP-003 compliant functions
+│       ├── main.py               # FastAPI server
+│       └── test_mip003.py        # Compliance tests
+├── dist/                         # Compiled output
+├── package.json                  # Node.js configuration
+├── README.md                     # This file
+└── API_DOCUMENTATION.md          # Detailed API docs
+```
+
+## 🎯 Key Features
+
+- **Intent-Driven**: Analyzes real intent signals, not just demographics
+- **Conservative Approach**: Safety-first with authenticity validation
+- **Blockchain Ready**: Full MIP-003 compliance for Masumi network
+- **Production Tested**: 121 total tests across both services
+- **Scalable Architecture**: Async processing with status tracking
+- **Comprehensive Logging**: Full observability and debugging
 
 ## 📚 Documentation
 
-- **API_DOCUMENTATION.md** - Complete API reference with examples
-- **SERVER_GUIDE.md** - Server deployment and configuration guide
-- **TESTING_GUIDE.md** - Testing instructions and examples
-- **USAGE_EXAMPLES.md** - Practical usage examples
+- **API Documentation**: Complete API reference with examples
+- **Integration Guide**: Step-by-step Masumi integration
+- **Testing Guide**: How to run and extend tests
+- **Deployment Guide**: Production deployment instructions
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests: `npm test`
+4. Run tests: `npm test` and `python test_mip003.py`
 5. Submit a pull request
 
 ## 📄 License
 
-MIT License - see LICENSE file for details
+MIT License - see LICENSE file for details.
 
-## 🆘 Support
+## 🚀 Status
 
-For issues, questions, or feature requests:
-1. Check the documentation files
-2. Review the test examples
-3. Open an issue on GitHub
+**Production Ready** ✅
+- Node.js Service: 116/116 tests passing
+- Masumi Integration: 5/5 MIP-003 tests passing
+- End-to-end workflow: Fully functional
+- Documentation: Complete
+- Deployment: Ready for production
 
 ---
 
-**Built with TypeScript, tested with Jest, powered by property-based testing for maximum reliability.**
+Built with ❤️ for personalized, intent-driven outreach at scale.
