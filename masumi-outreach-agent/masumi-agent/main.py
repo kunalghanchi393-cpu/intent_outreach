@@ -38,6 +38,31 @@ async def lifespan(app: FastAPI):
     print("📡 MIP-003 Agentic Service API Standard compliant")
     print()
     
+    # Validate Node.js service connection
+    outreach_url = os.getenv('OUTREACH_SERVICE_URL', 'http://localhost:3000')
+    print(f"🔗 Checking Node.js service at: {outreach_url}")
+    try:
+        availability = await check_availability()
+        if availability["status"] == "available":
+            print(f"✅ Node.js service connected successfully")
+        else:
+            print(f"⚠️  WARNING: Node.js service not available")
+            print(f"   Status: {availability}")
+    except Exception as e:
+        print(f"⚠️  WARNING: Could not connect to Node.js service: {e}")
+        print(f"   Please ensure the Node.js service is running at: {outreach_url}")
+    print()
+    
+    # Validate production configuration
+    network = os.getenv("NETWORK", "Preprod")
+    if network != "Preprod":
+        required_vars = ["AGENT_IDENTIFIER", "SELLER_VKEY", "PAYMENT_API_KEY"]
+        missing = [var for var in required_vars if not os.getenv(var)]
+        if missing:
+            print(f"⚠️  WARNING: Missing required environment variables: {', '.join(missing)}")
+            print("   These are required for production deployment")
+            print()
+    
     # Start background job processor
     global background_task
     background_task = asyncio.create_task(job_processor())
@@ -175,6 +200,19 @@ async def health_check():
         "outreach_service": availability
     }
 
+@app.get("/version")
+async def get_version():
+    """
+    Get agent version and configuration information
+    """
+    return {
+        "version": "1.0.0",
+        "mip003_compliant": True,
+        "node_service_url": os.getenv("OUTREACH_SERVICE_URL", "http://localhost:3000"),
+        "network": os.getenv("NETWORK", "Preprod"),
+        "agent_identifier": os.getenv("AGENT_IDENTIFIER", "intent-driven-outreach-agent-v1")
+    }
+
 @app.get("/jobs")
 async def list_jobs():
     """
@@ -255,8 +293,8 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     
     print(f"🌐 Starting server on {host}:{port}")
-    print("📖 API Documentation available at: http://localhost:8080/docs")
-    print("🔍 Health check available at: http://localhost:8080/health")
+    print(f"📖 API Documentation available at: http://{host}:{port}/docs")
+    print(f"🔍 Health check available at: http://{host}:{port}/health")
     print()
     
     uvicorn.run(

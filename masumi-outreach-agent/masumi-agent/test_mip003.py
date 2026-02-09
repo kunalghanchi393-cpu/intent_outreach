@@ -6,11 +6,12 @@ Tests all required MIP-003 Agentic Service API Standard endpoints
 import asyncio
 import json
 import sys
+import os
 import aiohttp
 from typing import Dict, Any
 
-# Configuration
-BASE_URL = "http://localhost:8080"
+# Configuration - can be overridden with environment variable
+BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8080")
 TIMEOUT = 30
 
 # Test data
