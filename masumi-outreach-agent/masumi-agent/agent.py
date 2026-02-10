@@ -214,6 +214,7 @@ async def check_availability() -> Dict[str, Any]:
 def get_input_schema() -> Dict[str, Any]:
     """
     MIP-003 Compliant: Get input schema for the service
+    Sokosumi-compatible flat schema (no nested objects or arrays)
     
     Returns:
         Input schema definition
@@ -221,80 +222,59 @@ def get_input_schema() -> Dict[str, Any]:
     return {
         "input_data": [
             {
-                "id": "prospectData",
-                "type": "object",
-                "name": "Prospect Information",
-                "data": {
-                    "description": "Information about the target prospect for outreach",
-                    "required": True,
-                    "properties": {
-                        "role": {
-                            "type": "string",
-                            "required": True,
-                            "description": "Prospect's job role (e.g., 'VP of Engineering')"
-                        },
-                        "companyContext": {
-                            "type": "object",
-                            "required": True,
-                            "description": "Company information",
-                            "properties": {
-                                "name": {"type": "string", "required": True},
-                                "industry": {"type": "string", "required": True},
-                                "size": {
-                                    "type": "option",
-                                    "required": True,
-                                    "options": ["startup", "small", "medium", "large", "enterprise"]
-                                }
-                            }
-                        },
-                        "contactDetails": {
-                            "type": "object",
-                            "required": True,
-                            "description": "Contact information",
-                            "properties": {
-                                "name": {"type": "string", "required": True},
-                                "email": {"type": "string", "required": True, "format": "email"}
-                            }
-                        }
-                    }
-                },
-                "validations": [
-                    {
-                        "type": "required",
-                        "message": "Prospect data is required for outreach generation"
-                    }
-                ]
+                "id": "prospect_name",
+                "type": "string",
+                "name": "Prospect name",
+                "validations": [{"type": "required"}]
             },
             {
-                "id": "intentSignals",
-                "type": "array",
-                "name": "Intent Signals",
+                "id": "prospect_role",
+                "type": "string",
+                "name": "Prospect role/title",
+                "validations": [{"type": "required"}]
+            },
+            {
+                "id": "company_name",
+                "type": "string",
+                "name": "Company name",
+                "validations": [{"type": "required"}]
+            },
+            {
+                "id": "company_industry",
+                "type": "string",
+                "name": "Company industry"
+            },
+            {
+                "id": "company_size",
+                "type": "option",
+                "name": "Company size",
                 "data": {
-                    "description": "Array of intent signals indicating prospect interest",
-                    "required": True,
-                    "minItems": 1,
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "option",
-                                "required": True,
-                                "options": ["job_change", "funding_event", "technology_adoption", "company_growth", "industry_trend"]
-                            },
-                            "description": {"type": "string", "required": True},
-                            "timestamp": {"type": "string", "required": True, "format": "date-time"},
-                            "relevanceScore": {"type": "number", "required": True, "min": 0, "max": 1},
-                            "source": {"type": "string", "required": True}
-                        }
-                    }
-                },
-                "validations": [
-                    {
-                        "type": "minLength",
-                        "value": 1,
-                        "message": "At least one intent signal is required"
-                    }
-                ]
+                    "options": ["startup", "small", "medium", "large", "enterprise"]
+                }
+            },
+            {
+                "id": "prospect_email",
+                "type": "string",
+                "name": "Prospect email"
+            },
+            {
+                "id": "intent_signal",
+                "type": "option",
+                "name": "Primary intent signal",
+                "data": {
+                    "options": [
+                        "job_change",
+                        "funding_event",
+                        "technology_adoption",
+                        "company_growth",
+                        "industry_trend"
+                    ]
+                }
+            },
+            {
+                "id": "intent_description",
+                "type": "string",
+                "name": "Intent description"
             }
         ]
     }
@@ -302,40 +282,21 @@ def get_input_schema() -> Dict[str, Any]:
 def get_demo_data() -> Dict[str, Any]:
     """
     MIP-003 Compliant: Get demo data for marketing purposes
+    Uses flat format compatible with Sokosumi
     
     Returns:
         Example input and output data
     """
     return {
         "input": {
-            "prospectData": {
-                "role": "VP of Engineering",
-                "companyContext": {
-                    "name": "TechCorp Inc",
-                    "industry": "Software",
-                    "size": "medium"
-                },
-                "contactDetails": {
-                    "name": "John Smith",
-                    "email": "john.smith@techcorp.com"
-                }
-            },
-            "intentSignals": [
-                {
-                    "type": "funding_event",
-                    "description": "Company raised Series B funding",
-                    "timestamp": "2024-01-15T00:00:00.000Z",
-                    "relevanceScore": 0.9,
-                    "source": "TechCrunch"
-                },
-                {
-                    "type": "technology_adoption",
-                    "description": "Migrating to cloud infrastructure",
-                    "timestamp": "2024-01-10T00:00:00.000Z",
-                    "relevanceScore": 0.8,
-                    "source": "LinkedIn"
-                }
-            ]
+            "prospect_name": "John Smith",
+            "prospect_role": "VP of Engineering",
+            "company_name": "TechCorp Inc",
+            "company_industry": "Software",
+            "company_size": "medium",
+            "prospect_email": "john.smith@techcorp.com",
+            "intent_signal": "funding_event",
+            "intent_description": "Company raised Series B funding"
         },
         "output": {
             "result": "Hi John,\n\nI saw that TechCorp Inc recently raised Series B funding - congratulations on this significant milestone! Given your role as VP of Engineering and the company's growth trajectory, I thought you might be interested in discussing how leading engineering teams are scaling their infrastructure during rapid expansion phases.\n\nI'd love to share some insights that might be relevant to your current priorities, particularly around cloud migration strategies that other Series B companies have found effective.\n\nWould you be open to a brief conversation about this?\n\nBest regards"
@@ -345,6 +306,7 @@ def get_demo_data() -> Dict[str, Any]:
 async def process_outreach_job(job_id: str) -> None:
     """
     Process the actual outreach job by calling the Node.js service
+    Handles flat input from Sokosumi and reconstructs structured format internally
     
     Args:
         job_id: The job ID to process
@@ -362,13 +324,45 @@ async def process_outreach_job(job_id: str) -> None:
         
         # Extract input data
         input_data = job["input_data"]
-        prospect_data = input_data.get("prospectData")
-        intent_signals = input_data.get("intentSignals", [])
+        
+        # Check if input is already in structured format (backward compatibility)
+        if "prospectData" in input_data and "intentSignals" in input_data:
+            # Already structured format
+            prospect_data = input_data.get("prospectData")
+            intent_signals = input_data.get("intentSignals", [])
+        else:
+            # Flat format from Sokosumi - reconstruct structured format
+            prospect_data = {
+                "role": input_data.get("prospect_role", ""),
+                "companyContext": {
+                    "name": input_data.get("company_name", ""),
+                    "industry": input_data.get("company_industry", "Technology"),
+                    "size": input_data.get("company_size", "medium")
+                },
+                "contactDetails": {
+                    "name": input_data.get("prospect_name", ""),
+                    "email": input_data.get("prospect_email", "")
+                }
+            }
+            
+            # Reconstruct intent signal from flat fields
+            intent_signal_type = input_data.get("intent_signal", "company_growth")
+            intent_description = input_data.get("intent_description", "Recent company activity")
+            
+            intent_signals = [
+                {
+                    "type": intent_signal_type,
+                    "description": intent_description,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "relevanceScore": 0.8,
+                    "source": "User Input"
+                }
+            ]
         
         # Validate required fields
         if not prospect_data or not intent_signals:
             job["status"] = "failed"
-            job["result"] = "Invalid input data: missing prospectData or intentSignals"
+            job["result"] = "Invalid input data: missing required fields"
             return
         
         # Prepare request for the outreach service
