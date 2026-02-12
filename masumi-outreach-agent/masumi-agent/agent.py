@@ -214,19 +214,20 @@ async def check_availability() -> Dict[str, Any]:
 def get_input_schema() -> list:
     """
     MIP-003 Compliant: Get input schema for the service
-    New schema-validator format with direct list return (not wrapped)
+    New schema-validator format compatible with https://docs.masumi.network/documentation/technical-documentation/schema-validator-component
+    Returns a list directly (not wrapped in {"input_data": [...]})
     
     Returns:
         Input schema definition as a list
     """
     return [
         {
-            "id": "name",
+            "id": "prospect_name",
             "type": "text",
-            "name": "Full Name",
+            "name": "Prospect Name",
             "data": {
-                "placeholder": "Enter your full name",
-                "description": "Your complete name as it appears on official documents"
+                "placeholder": "Enter full name",
+                "description": "Full name of the prospect"
             },
             "validations": [
                 {"validation": "min", "value": "2"},
@@ -234,82 +235,94 @@ def get_input_schema() -> list:
             ]
         },
         {
-            "id": "email",
+            "id": "prospect_email",
             "type": "email",
-            "name": "Email Address",
+            "name": "Prospect Email",
             "data": {
-                "placeholder": "your.email@example.com",
-                "description": "Your primary email address"
+                "placeholder": "name@company.com"
             },
             "validations": [
                 {"validation": "format", "value": "email"}
             ]
         },
         {
-            "id": "age",
-            "type": "number",
-            "name": "Age",
+            "id": "prospect_role",
+            "type": "text",
+            "name": "Prospect Role",
             "data": {
-                "description": "Your current age (optional)"
-            },
-            "validations": [
-                {"validation": "optional", "value": "boolean"},
-                {"validation": "min", "value": "18"},
-                {"validation": "max", "value": "120"},
-                {"validation": "format", "value": "integer"}
-            ]
+                "placeholder": "VP of Engineering"
+            }
         },
         {
-            "id": "interests",
+            "id": "company_name",
+            "type": "text",
+            "name": "Company Name"
+        },
+        {
+            "id": "company_industry",
+            "type": "text",
+            "name": "Company Industry"
+        },
+        {
+            "id": "company_size",
             "type": "option",
-            "name": "Interests",
+            "name": "Company Size",
             "data": {
-                "description": "Select your areas of interest",
-                "values": ["Technology", "Sports", "Music", "Art", "Science", "Travel"]
-            },
-            "validations": [
-                {"validation": "min", "value": "1"},
-                {"validation": "max", "value": "3"}
-            ]
+                "values": ["startup", "small", "medium", "large", "enterprise"]
+            }
         },
         {
-            "id": "newsletter",
-            "type": "boolean",
-            "name": "Newsletter Subscription",
+            "id": "intent_signal",
+            "type": "option",
+            "name": "Primary Intent Signal",
             "data": {
-                "description": "Subscribe to our newsletter for updates (optional)"
-            },
-            "validations": [
-                {"validation": "optional", "value": "boolean"}
-            ]
+                "values": [
+                    "job_change",
+                    "funding_event",
+                    "technology_adoption",
+                    "company_growth",
+                    "industry_trend"
+                ]
+            }
+        },
+        {
+            "id": "intent_description",
+            "type": "text",
+            "name": "Intent Description",
+            "data": {
+                "placeholder": "Describe the signal..."
+            }
         }
     ]
 
 def get_demo_data() -> Dict[str, Any]:
     """
     MIP-003 Compliant: Get demo data for marketing purposes
-    Uses new schema-validator format fields
+    Uses new schema-validator format with outreach-specific fields
     
     Returns:
         Example input and output data
     """
     return {
         "input": {
-            "name": "John Smith",
-            "email": "john.smith@example.com",
-            "age": 35,
-            "interests": ["Technology", "Science"],
-            "newsletter": True
+            "prospect_name": "John Smith",
+            "prospect_email": "john.smith@techcorp.com",
+            "prospect_role": "VP of Engineering",
+            "company_name": "TechCorp Inc",
+            "company_industry": "Software",
+            "company_size": "medium",
+            "intent_signal": "funding_event",
+            "intent_description": "Company raised Series B funding"
         },
         "output": {
-            "result": "Demo output: User profile created successfully for John Smith with interests in Technology and Science."
+            "result": "Hi John,\n\nI saw that TechCorp Inc recently raised Series B funding - congratulations on this significant milestone! Given your role as VP of Engineering and the company's growth trajectory, I thought you might be interested in discussing how leading engineering teams are scaling their infrastructure during rapid expansion phases.\n\nI'd love to share some insights that might be relevant to your current priorities, particularly around cloud migration strategies that other Series B companies have found effective.\n\nWould you be open to a brief conversation about this?\n\nBest regards"
         }
     }
 
 async def process_outreach_job(job_id: str) -> None:
     """
-    Process the job with new schema-validator format input
-    Handles the new flat input fields: name, email, age, interests, newsletter
+    Process the actual outreach job by calling the Node.js service
+    Handles flat input from new schema-validator format and reconstructs structured format internally
     
     Args:
         job_id: The job ID to process
@@ -323,42 +336,93 @@ async def process_outreach_job(job_id: str) -> None:
     try:
         # Update status to running
         job["status"] = "running"
-        logger.info(f"Processing job {job_id}")
+        logger.info(f"Processing outreach job {job_id}")
         
-        # Extract input data with new schema fields
+        # Extract input data
         input_data = job["input_data"]
         
-        # Validate required fields from new schema
-        name = input_data.get("name", "")
-        email = input_data.get("email", "")
-        age = input_data.get("age")
-        interests = input_data.get("interests", [])
-        newsletter = input_data.get("newsletter", False)
+        # Check if input is already in structured format (backward compatibility)
+        if "prospectData" in input_data and "intentSignals" in input_data:
+            # Already structured format
+            prospect_data = input_data.get("prospectData")
+            intent_signals = input_data.get("intentSignals", [])
+        else:
+            # Flat format from new schema-validator - reconstruct structured format
+            prospect_data = {
+                "role": input_data.get("prospect_role", ""),
+                "companyContext": {
+                    "name": input_data.get("company_name", ""),
+                    "industry": input_data.get("company_industry", "Technology"),
+                    "size": input_data.get("company_size", "medium")
+                },
+                "contactDetails": {
+                    "name": input_data.get("prospect_name", ""),
+                    "email": input_data.get("prospect_email", "")
+                }
+            }
+            
+            # Reconstruct intent signal from flat fields
+            intent_signal_type = input_data.get("intent_signal", "company_growth")
+            intent_description = input_data.get("intent_description", "Recent company activity")
+            
+            intent_signals = [
+                {
+                    "type": intent_signal_type,
+                    "description": intent_description,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "relevanceScore": 0.8,
+                    "source": "User Input"
+                }
+            ]
         
-        if not name or not email:
+        # Validate required fields
+        if not prospect_data or not intent_signals:
             job["status"] = "failed"
-            job["result"] = "Invalid input data: name and email are required"
-            logger.error(f"Job {job_id} failed: missing required fields")
+            job["result"] = "Invalid input data: missing required fields"
             return
         
-        # Process the job (simplified demo processing)
-        # In a real implementation, this would call the appropriate service
-        result = {
-            "success": True,
-            "message": f"Profile created for {name}",
-            "data": {
-                "name": name,
-                "email": email,
-                "age": age,
-                "interests": interests,
-                "newsletter_subscribed": newsletter,
-                "processed_at": datetime.utcnow().isoformat() + "Z"
-            }
+        # Prepare request for the outreach service
+        outreach_request = {
+            "prospectData": prospect_data,
+            "intentSignals": intent_signals
         }
         
-        job["status"] = "completed"
-        job["result"] = json.dumps(result)
-        logger.info(f"Job {job_id} completed successfully")
+        # Call the Intent-Driven Cold Outreach Agent service
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{OUTREACH_SERVICE_URL}/agent/outreach",
+                json=outreach_request,
+                timeout=aiohttp.ClientTimeout(total=OUTREACH_TIMEOUT),
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                
+                if response.status == 200:
+                    result = await response.json()
+                    
+                    # Format result for MIP-003 compliance
+                    if result.get("success"):
+                        data = result.get("data", {})
+                        formatted_result = {
+                            "intentConfidence": data.get("intentConfidence"),
+                            "reasoningSummary": data.get("reasoningSummary"),
+                            "recommendedMessage": data.get("recommendedMessage"),
+                            "alternativeMessages": data.get("alternativeMessages", []),
+                            "suggestedFollowUpTiming": data.get("suggestedFollowUpTiming"),
+                            "processingMetadata": data.get("processingMetadata", {})
+                        }
+                        
+                        job["status"] = "completed"
+                        job["result"] = json.dumps(formatted_result)
+                        logger.info(f"Job {job_id} completed successfully")
+                    else:
+                        job["status"] = "failed"
+                        job["result"] = f"Outreach processing failed: {result.get('error', {}).get('message', 'Unknown error')}"
+                        logger.error(f"Job {job_id} failed: {job['result']}")
+                else:
+                    error_data = await response.json()
+                    job["status"] = "failed"
+                    job["result"] = f"Service error {response.status}: {error_data.get('error', {}).get('message', 'Unknown error')}"
+                    logger.error(f"Job {job_id} failed with HTTP {response.status}")
                     
     except Exception as e:
         job["status"] = "failed"

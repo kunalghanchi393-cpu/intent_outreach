@@ -1,7 +1,7 @@
 # Schema-Validator Format Update
 
 ## Summary
-Updated the Masumi agent input schema from the old format to the new schema-validator format.
+Updated the Masumi agent input schema to the new schema-validator format compatible with https://docs.masumi.network/documentation/technical-documentation/schema-validator-component
 
 ## Changes Made
 
@@ -11,38 +11,44 @@ Updated the Masumi agent input schema from the old format to the new schema-vali
 - **Field Types**: Updated to new types:
   - `text` (was `string`)
   - `email` (new type)
-  - `number` (new type)
-  - `option` (kept same)
-  - `boolean` (new type)
+  - `option` (kept same, but uses `values` instead of `options`)
 - **Validation Format**: Changed from `{"type": "..."}` to `{"validation": "...", "value": "..."}`
 
-### 2. New Schema Fields
-Replaced outreach-specific fields with generic demo fields:
-- `name` (text) - Full Name with min/max length validation
-- `email` (email) - Email Address with format validation
-- `age` (number) - Age with optional, min, max, and integer format validation
-- `interests` (option) - Multi-select interests with min/max selection validation
-- `newsletter` (boolean) - Newsletter subscription (optional)
+### 2. Outreach-Specific Schema Fields
+The schema now includes 8 flat fields for cold outreach:
+- `prospect_name` (text) - Prospect's full name with min/max length validation
+- `prospect_email` (email) - Prospect's email with format validation
+- `prospect_role` (text) - Prospect's job title/role
+- `company_name` (text) - Company name
+- `company_industry` (text) - Company industry
+- `company_size` (option) - Company size (startup, small, medium, large, enterprise)
+- `intent_signal` (option) - Primary intent signal type
+- `intent_description` (text) - Description of the intent signal
 
 ### 3. Updated `get_demo_data()` Function
-Updated demo data to match the new schema fields:
+Updated demo data to match the outreach schema fields:
 ```json
 {
   "input": {
-    "name": "John Smith",
-    "email": "john.smith@example.com",
-    "age": 35,
-    "interests": ["Technology", "Science"],
-    "newsletter": true
+    "prospect_name": "John Smith",
+    "prospect_email": "john.smith@techcorp.com",
+    "prospect_role": "VP of Engineering",
+    "company_name": "TechCorp Inc",
+    "company_industry": "Software",
+    "company_size": "medium",
+    "intent_signal": "funding_event",
+    "intent_description": "Company raised Series B funding"
   }
 }
 ```
 
 ### 4. Updated `process_outreach_job()` Function
-Simplified job processing to handle the new flat input fields:
-- Validates required fields (name, email)
-- Processes the new schema fields
-- Returns a simple success result with processed data
+Enhanced job processing to handle flat input and reconstruct structured format internally:
+- Accepts flat input from new schema-validator format
+- Reconstructs `prospectData` object with nested structure
+- Reconstructs `intentSignals` array from flat fields
+- Maintains backward compatibility with old structured format
+- Calls Node.js outreach service with proper structured format
 
 ## Verification
 
@@ -51,16 +57,27 @@ The `/input_schema` endpoint now returns:
 ```json
 [
   {
-    "id": "name",
+    "id": "prospect_name",
     "type": "text",
-    "name": "Full Name",
+    "name": "Prospect Name",
     "data": {
-      "placeholder": "Enter your full name",
-      "description": "Your complete name as it appears on official documents"
+      "placeholder": "Enter full name",
+      "description": "Full name of the prospect"
     },
     "validations": [
       {"validation": "min", "value": "2"},
       {"validation": "max", "value": "100"}
+    ]
+  },
+  {
+    "id": "prospect_email",
+    "type": "email",
+    "name": "Prospect Email",
+    "data": {
+      "placeholder": "name@company.com"
+    },
+    "validations": [
+      {"validation": "format", "value": "email"}
     ]
   },
   ...
@@ -68,12 +85,15 @@ The `/input_schema` endpoint now returns:
 ```
 
 ### Key Points
-- ✅ Schema returns as a list directly (not wrapped)
+- ✅ Schema returns as a list directly (not wrapped in `{"input_data": [...]}`)
 - ✅ No legacy `type: "string"` or `required: true` fields
 - ✅ Uses new validation format: `{"validation": "type", "value": "..."}`
-- ✅ All new field types: text, email, number, option, boolean
+- ✅ Field types: text, email, option (no nested objects or arrays)
+- ✅ Option fields use `values` array instead of `options`
 - ✅ MIP-003 compliance maintained
 - ✅ `/input_schema` endpoint returns HTTP 200
+- ✅ Backward compatibility with structured format maintained
+- ✅ Job processing reconstructs structured format internally for Node.js service
 
 ## Deployment
 Changes committed and pushed to master branch. Railway will automatically redeploy.
