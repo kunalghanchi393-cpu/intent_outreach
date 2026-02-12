@@ -164,10 +164,10 @@ async def get_availability_endpoint():
 async def get_input_schema_endpoint():
     """
     MIP-003 Required: Returns the expected input format for jobs
+    Sokosumi expects the schema wrapped in {"input_data": [...]}
     """
     try:
-        result = get_input_schema()
-        return result
+        return {"input_data": get_input_schema()}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Schema retrieval failed: {str(e)}")
