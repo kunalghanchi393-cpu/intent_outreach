@@ -13,7 +13,7 @@ load_dotenv()
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 import uvicorn
 import os
@@ -25,6 +25,68 @@ from agent import (
 
 # Background task reference
 background_task = None
+
+# Pydantic Models for MIP-003 Compliance
+
+class StartJobRequest(BaseModel):
+    identifier_from_purchaser: str
+    input_data: Dict[str, Any]
+
+class StartJobResponse(BaseModel):
+    """MIP-003 compliant response for /start_job endpoint"""
+    id: str
+    blockchainIdentifier: str
+    payByTime: int
+    submitResultTime: int
+    unlockTime: int
+    externalDisputeUnlockTime: int
+    agentIdentifier: str
+    sellerVKey: str
+    identifierFromPurchaser: str
+    inputHash: str
+
+class JobStatusResponse(BaseModel):
+    """MIP-003 compliant response for /status endpoint"""
+    id: str
+    status: str
+    result: Optional[str] = None
+    input_schema: Optional[list] = None
+
+class ProvideInputRequest(BaseModel):
+    job_id: str
+    status_id: str
+    input_data: Dict[str, Any]
+
+class ProvideInputResponse(BaseModel):
+    """MIP-003 compliant response for /provide_input endpoint"""
+    inputHash: str
+    signature: str
+
+class AvailabilityResponse(BaseModel):
+    """MIP-003 compliant response for /availability endpoint"""
+    status: str
+    type: str
+    message: str
+
+class InputSchemaResponse(BaseModel):
+    """Response wrapper for /input_schema endpoint (Sokosumi compatibility)"""
+    input_data: list
+
+class HealthResponse(BaseModel):
+    """Health check response"""
+    status: str
+    service: str
+    version: str
+    mip003_compliant: bool
+    outreach_service: Dict[str, Any]
+
+class VersionResponse(BaseModel):
+    """Version information response"""
+    version: str
+    mip003_compliant: bool
+    node_service_url: str
+    network: str
+    agent_identifier: str
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,19 +147,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Pydantic models for request/response validation
-class StartJobRequest(BaseModel):
-    identifier_from_purchaser: str
-    input_data: Dict[str, Any]
-
-class ProvideInputRequest(BaseModel):
-    job_id: str
-    status_id: str
-    input_data: Dict[str, Any]
+# FastAPI app
+app = FastAPI(
+    title="Intent-Driven Cold Outreach Agent",
+    description="MIP-003 Compliant Agentic Service for personalized outreach message generation",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # MIP-003 Required Endpoints
 
-@app.post("/start_job")
+@app.post("/start_job", response_model=StartJobResponse)
 async def start_job_endpoint(request: StartJobRequest):
     """
     MIP-003 Required: Initiates a job on the remote crew
@@ -117,7 +177,7 @@ async def start_job_endpoint(request: StartJobRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Job initiation failed: {str(e)}")
 
-@app.get("/status")
+@app.get("/status", response_model=JobStatusResponse)
 async def get_status_endpoint(job_id: str = Query(..., description="The ID of the job to check")):
     """
     MIP-003 Required: Retrieves the current status of a specific job
@@ -131,7 +191,7 @@ async def get_status_endpoint(job_id: str = Query(..., description="The ID of th
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Status retrieval failed: {str(e)}")
 
-@app.post("/provide_input")
+@app.post("/provide_input", response_model=ProvideInputResponse)
 async def provide_input_endpoint(request: ProvideInputRequest):
     """
     MIP-003 Optional: Provides additional input for a job awaiting input
@@ -148,7 +208,7 @@ async def provide_input_endpoint(request: ProvideInputRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Input processing failed: {str(e)}")
 
-@app.get("/availability")
+@app.get("/availability", response_model=AvailabilityResponse)
 async def get_availability_endpoint():
     """
     MIP-003 Required: Checks if the server is operational
@@ -160,7 +220,7 @@ async def get_availability_endpoint():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Availability check failed: {str(e)}")
 
-@app.get("/input_schema")
+@app.get("/input_schema", response_model=InputSchemaResponse)
 async def get_input_schema_endpoint():
     """
     MIP-003 Required: Returns the expected input format for jobs
@@ -186,7 +246,7 @@ async def get_demo_endpoint():
 
 # Additional endpoints for monitoring and management
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
     Health check endpoint for load balancers and monitoring
@@ -200,7 +260,7 @@ async def health_check():
         "outreach_service": availability
     }
 
-@app.get("/version")
+@app.get("/version", response_model=VersionResponse)
 async def get_version():
     """
     Get agent version and configuration information
