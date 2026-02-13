@@ -29,6 +29,7 @@ OUTREACH_SERVICE_URL = os.getenv("OUTREACH_SERVICE_URL", "http://localhost:3000"
 OUTREACH_TIMEOUT = int(os.getenv("OUTREACH_TIMEOUT", "30"))
 MASUMI_PAYMENT_URL = os.getenv("MASUMI_PAYMENT_URL", "http://localhost:3001")
 PAYMENT_API_KEY = os.getenv("PAYMENT_API_KEY", "")
+MOCK_PAYMENTS = os.getenv("MOCK_PAYMENTS", "false").lower() == "true"
 
 # In-memory job storage (in production, use a proper database)
 job_storage = {}
@@ -150,51 +151,64 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
         # Hash input data for integrity
         input_hash = hash_input_data(input_data)
         
-        # Call Masumi Payment Service to create job with real blockchain escrow
-        logger.info(f"Calling Masumi Payment Service to create job {job_id}")
-        
-        payment_request = {
-            "agentIdentifier": agent_identifier,
-            "sellerVKey": seller_vkey,
-            "identifierFromPurchaser": identifier_from_purchaser,
-            "inputHash": input_hash,
-            "price": 500  # 500 credits
-        }
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                headers = {"Content-Type": "application/json"}
-                if PAYMENT_API_KEY:
-                    headers["Authorization"] = f"Bearer {PAYMENT_API_KEY}"
-                
-                async with session.post(
-                    f"{MASUMI_PAYMENT_URL}/create-job",
-                    json=payment_request,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
+        # Check if mock payments mode is enabled
+        if MOCK_PAYMENTS:
+            logger.info(f"MOCK_PAYMENTS enabled - using simulated blockchain for job {job_id}")
+            
+            # Generate mock blockchain details
+            blockchain_identifier = generate_blockchain_identifier()
+            pay_by_time = current_time + 3600  # 1 hour to pay
+            submit_result_time = current_time + 7200  # 2 hours to submit result
+            unlock_time = current_time + 10800  # 3 hours to unlock payment
+            external_dispute_unlock_time = current_time + 86400  # 24 hours for disputes
+            
+            logger.info(f"Mock blockchain ID: {blockchain_identifier}")
+        else:
+            # Call Masumi Payment Service to create job with real blockchain escrow
+            logger.info(f"Calling Masumi Payment Service to create job {job_id}")
+            
+            payment_request = {
+                "agentIdentifier": agent_identifier,
+                "sellerVKey": seller_vkey,
+                "identifierFromPurchaser": identifier_from_purchaser,
+                "inputHash": input_hash,
+                "price": 500  # 500 credits
+            }
+            
+            try:
+                async with aiohttp.ClientSession() as session:
+                    headers = {"Content-Type": "application/json"}
+                    if PAYMENT_API_KEY:
+                        headers["Authorization"] = f"Bearer {PAYMENT_API_KEY}"
                     
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Payment Service error: {response.status} - {error_text}")
-                        raise ValueError(f"Payment Service returned {response.status}: {error_text}")
-                    
-                    payment_response = await response.json()
-                    logger.info(f"Payment Service response: {payment_response}")
-                    
-                    # Extract blockchain details from Payment Service response
-                    blockchain_identifier = payment_response.get("blockchainIdentifier")
-                    pay_by_time = payment_response.get("payByTime")
-                    submit_result_time = payment_response.get("submitResultTime")
-                    unlock_time = payment_response.get("unlockTime")
-                    external_dispute_unlock_time = payment_response.get("externalDisputeUnlockTime")
-                    
-                    if not blockchain_identifier:
-                        raise ValueError("Payment Service did not return blockchainIdentifier")
-                    
-        except aiohttp.ClientError as e:
-            logger.error(f"Failed to connect to Payment Service: {e}")
-            raise ValueError(f"Could not connect to Masumi Payment Service at {MASUMI_PAYMENT_URL}: {e}")
+                    async with session.post(
+                        f"{MASUMI_PAYMENT_URL}/create-job",
+                        json=payment_request,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        
+                        if response.status != 200:
+                            error_text = await response.text()
+                            logger.error(f"Payment Service error: {response.status} - {error_text}")
+                            raise ValueError(f"Payment Service returned {response.status}: {error_text}")
+                        
+                        payment_response = await response.json()
+                        logger.info(f"Payment Service response: {payment_response}")
+                        
+                        # Extract blockchain details from Payment Service response
+                        blockchain_identifier = payment_response.get("blockchainIdentifier")
+                        pay_by_time = payment_response.get("payByTime")
+                        submit_result_time = payment_response.get("submitResultTime")
+                        unlock_time = payment_response.get("unlockTime")
+                        external_dispute_unlock_time = payment_response.get("externalDisputeUnlockTime")
+                        
+                        if not blockchain_identifier:
+                            raise ValueError("Payment Service did not return blockchainIdentifier")
+                        
+            except aiohttp.ClientError as e:
+                logger.error(f"Failed to connect to Payment Service: {e}")
+                raise ValueError(f"Could not connect to Masumi Payment Service at {MASUMI_PAYMENT_URL}: {e}")
         
         # Store job information with real blockchain identifier
         job_storage[job_id] = {
@@ -546,6 +560,14 @@ async def process_outreach_job(job_id: str) -> None:
                         }
                         
                         result_json = json.dumps(formatted_result)
+                        
+                        # Check if mock payments mode is enabled
+                        if MOCK_PAYMENTS:
+                            logger.info(f"MOCK_PAYMENTS enabled - skipping Payment Service result submission for job {job_id}")
+                            job["status"] = "completed"
+                            job["result"] = result_json
+                            logger.info(f"Job {job_id} completed successfully (mock mode)")
+                            return
                         
                         # Submit result to Masumi Payment Service
                         logger.info(f"Submitting result to Payment Service for job {job_id}")
