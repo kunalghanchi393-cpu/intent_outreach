@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 # Configuration
 OUTREACH_SERVICE_URL = os.getenv("OUTREACH_SERVICE_URL", "http://localhost:3000")
 OUTREACH_TIMEOUT = int(os.getenv("OUTREACH_TIMEOUT", "30"))
-AGENT_IDENTIFIER = os.getenv("AGENT_IDENTIFIER", "intent-driven-outreach-agent-v1")
-SELLER_VKEY = os.getenv("SELLER_VKEY", "")
 
 # In-memory job storage (in production, use a proper database)
 job_storage = {}
@@ -65,6 +63,16 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
     try:
         logger.info(f"Starting job for purchaser {identifier_from_purchaser}")
         
+        # Load and validate environment variables with strict MIP-003 compliance
+        agent_identifier = os.getenv("AGENT_IDENTIFIER", "").strip()
+        seller_vkey = os.getenv("SELLER_VKEY", "").strip()
+        
+        # Validate required environment variables
+        if not agent_identifier:
+            raise ValueError("AGENT_IDENTIFIER environment variable is not set or empty")
+        if not seller_vkey:
+            raise ValueError("SELLER_VKEY environment variable is not set or empty")
+        
         # Generate job details
         job_id = generate_job_id()
         blockchain_identifier = generate_blockchain_identifier()
@@ -93,7 +101,7 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
         
         logger.info(f"Job {job_id} created successfully")
         
-        # Return MIP-003 compliant response
+        # Return MIP-003 compliant response with cleaned values
         return {
             "id": job_id,
             "blockchainIdentifier": blockchain_identifier,
@@ -101,8 +109,8 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
             "submitResultTime": submit_result_time,
             "unlockTime": unlock_time,
             "externalDisputeUnlockTime": external_dispute_unlock_time,
-            "agentIdentifier": AGENT_IDENTIFIER,
-            "sellerVKey": SELLER_VKEY,
+            "agentIdentifier": agent_identifier,
+            "sellerVKey": seller_vkey,
             "identifierFromPurchaser": identifier_from_purchaser,
             "inputHash": input_hash
         }
