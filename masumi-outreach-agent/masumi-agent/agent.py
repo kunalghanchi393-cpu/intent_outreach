@@ -31,6 +31,49 @@ OUTREACH_TIMEOUT = int(os.getenv("OUTREACH_TIMEOUT", "30"))
 # In-memory job storage (in production, use a proper database)
 job_storage = {}
 
+# Schema option mappings for converting indices to values
+COMPANY_SIZE_OPTIONS = ["startup", "small", "medium", "large", "enterprise"]
+INTENT_SIGNAL_OPTIONS = [
+    "job_change",
+    "funding_event",
+    "technology_adoption",
+    "company_growth",
+    "industry_trend"
+]
+
+def convert_option_value(value: Any, options: List[str]) -> str:
+    """
+    Convert option value from Sokosumi format to actual string value.
+    Sokosumi may send either:
+    - A string value directly
+    - An array with a single index [n]
+    - An integer index n
+    
+    Args:
+        value: The value to convert (can be str, int, or list)
+        options: List of valid option values
+    
+    Returns:
+        The actual string value from the options list
+    """
+    # If it's already a string and valid, return it
+    if isinstance(value, str) and value in options:
+        return value
+    
+    # If it's a list with one element (Sokosumi format)
+    if isinstance(value, list) and len(value) > 0:
+        index = value[0]
+        if isinstance(index, int) and 0 <= index < len(options):
+            return options[index]
+    
+    # If it's an integer index
+    if isinstance(value, int) and 0 <= value < len(options):
+        return options[value]
+    
+    # Default to first option if conversion fails
+    logger.warning(f"Could not convert option value {value}, using default: {options[0]}")
+    return options[0]
+
 def generate_job_id() -> str:
     """Generate a unique job ID"""
     return str(uuid.uuid4())
@@ -356,12 +399,19 @@ async def process_outreach_job(job_id: str) -> None:
             intent_signals = input_data.get("intentSignals", [])
         else:
             # Flat format from new schema-validator - reconstruct structured format
+            # Handle Sokosumi sending array indices instead of string values
+            company_size_raw = input_data.get("company_size", "medium")
+            company_size = convert_option_value(company_size_raw, COMPANY_SIZE_OPTIONS)
+            
+            intent_signal_raw = input_data.get("intent_signal", "company_growth")
+            intent_signal_type = convert_option_value(intent_signal_raw, INTENT_SIGNAL_OPTIONS)
+            
             prospect_data = {
                 "role": input_data.get("prospect_role", ""),
                 "companyContext": {
                     "name": input_data.get("company_name", ""),
                     "industry": input_data.get("company_industry", "Technology"),
-                    "size": input_data.get("company_size", "medium")
+                    "size": company_size
                 },
                 "contactDetails": {
                     "name": input_data.get("prospect_name", ""),
@@ -371,7 +421,6 @@ async def process_outreach_job(job_id: str) -> None:
             
             # Reconstruct intent signals from flat fields
             # Node.js service requires at least 2 intent signals
-            intent_signal_type = input_data.get("intent_signal", "company_growth")
             intent_description = input_data.get("intent_description", "Recent company activity")
             
             # Primary intent signal from user input
@@ -384,7 +433,6 @@ async def process_outreach_job(job_id: str) -> None:
             }
             
             # Secondary signal inferred from company context (required by Node.js service)
-            company_size = input_data.get("company_size", "medium")
             secondary_signal = {
                 "type": "company_growth",
                 "description": f"Company size: {company_size} - indicates growth stage and potential",
