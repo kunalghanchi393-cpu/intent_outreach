@@ -369,19 +369,31 @@ async def process_outreach_job(job_id: str) -> None:
                 }
             }
             
-            # Reconstruct intent signal from flat fields
+            # Reconstruct intent signals from flat fields
+            # Node.js service requires at least 2 intent signals
             intent_signal_type = input_data.get("intent_signal", "company_growth")
             intent_description = input_data.get("intent_description", "Recent company activity")
             
-            intent_signals = [
-                {
-                    "type": intent_signal_type,
-                    "description": intent_description,
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "relevanceScore": 0.8,
-                    "source": "User Input"
-                }
-            ]
+            # Primary intent signal from user input
+            primary_signal = {
+                "type": intent_signal_type,
+                "description": intent_description,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "relevanceScore": 0.8,
+                "source": "User Input"
+            }
+            
+            # Secondary signal inferred from company context (required by Node.js service)
+            company_size = input_data.get("company_size", "medium")
+            secondary_signal = {
+                "type": "company_growth",
+                "description": f"Company size: {company_size} - indicates growth stage and potential",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "relevanceScore": 0.6,
+                "source": "Company Context"
+            }
+            
+            intent_signals = [primary_signal, secondary_signal]
         
         # Validate required fields
         if not prospect_data or not intent_signals:

@@ -144,13 +144,28 @@ async function handleOutreachRequest(req: http.IncomingMessage, res: http.Server
       timestamp: new Date(signal.timestamp)
     }));
 
-    // Process the outreach request
+    // Process the outreach request with full error logging
     const startTime = Date.now();
-    const result = await agent.processOutreachRequest(prospectData, processedSignals);
+    console.log('🔍 DEBUG: Starting outreach processing');
+    console.log('🔍 DEBUG: Request body:', JSON.stringify(body, null, 2));
+    console.log('🔍 DEBUG: Processed signals:', JSON.stringify(processedSignals, null, 2));
+    
+    let result;
+    try {
+      result = await agent.processOutreachRequest(prospectData, processedSignals);
+      console.log('🔍 DEBUG: Processing completed');
+      console.log('🔍 DEBUG RESULT:', JSON.stringify(result, null, 2));
+    } catch (err) {
+      console.error('❌ PROCESSING CRASH:', err);
+      console.error('❌ CRASH STACK:', err instanceof Error ? err.stack : 'No stack trace');
+      throw err;
+    }
+    
     const processingTime = Date.now() - startTime;
 
     // Handle processing errors
     if ('code' in result) {
+      console.error('⚠️  OUTREACH ERROR:', JSON.stringify(result, null, 2));
       const statusCode = getErrorStatusCode(result.code);
       res.writeHead(statusCode, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({

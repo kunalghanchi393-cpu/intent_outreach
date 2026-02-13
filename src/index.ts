@@ -179,13 +179,26 @@ export class IntentDrivenOutreachAgent {
     intentSignals: IntentSignal[]
   ): Promise<StructuredOutput | ProcessingError> {
     try {
+      console.log('🔍 STEP: Starting processOutreachRequest');
+      console.log('🔍 STEP: Prospect data:', JSON.stringify(prospectData, null, 2));
+      console.log('🔍 STEP: Intent signals:', JSON.stringify(intentSignals, null, 2));
+      
       // Validate inputs before processing
+      console.log('🔍 STEP: Running validation');
       const validationResult = this.validateInputs(prospectData, intentSignals);
+      console.log('🔍 STEP: Validation result:', JSON.stringify(validationResult, null, 2));
+      
       if (!validationResult.isValid) {
-        return this.createValidationError(validationResult);
+        console.error('❌ STEP: Validation failed');
+        const error = this.createValidationError(validationResult);
+        console.error('❌ STEP: Validation error:', JSON.stringify(error, null, 2));
+        return error;
       }
+      
+      console.log('✅ STEP: Validation passed');
 
       // Process with timeout
+      console.log('🔍 STEP: Starting reasoning agent processing');
       const processingPromise = this.reasoningAgent.processOutreachRequest(
         prospectData,
         intentSignals
@@ -198,6 +211,7 @@ export class IntentDrivenOutreachAgent {
       });
 
       const result = await Promise.race([processingPromise, timeoutPromise]);
+      console.log('✅ STEP: Reasoning agent processing completed');
 
       // Log processing details if verbose logging is enabled
       if (this.config.enableVerboseLogging && !('code' in result)) {
@@ -207,6 +221,9 @@ export class IntentDrivenOutreachAgent {
       return result;
 
     } catch (error) {
+      console.error('❌ STEP: Exception caught in processOutreachRequest');
+      console.error('❌ STEP: Error details:', error);
+      console.error('❌ STEP: Error stack:', error instanceof Error ? error.stack : 'No stack');
       return this.handleProcessingError(error);
     }
   }
