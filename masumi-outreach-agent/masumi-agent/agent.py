@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 OUTREACH_SERVICE_URL = os.getenv("OUTREACH_SERVICE_URL", "http://localhost:3000")
 OUTREACH_TIMEOUT = int(os.getenv("OUTREACH_TIMEOUT", "30"))
+MASUMI_PAYMENT_URL = os.getenv("MASUMI_PAYMENT_URL", "http://localhost:3001")
+PAYMENT_API_KEY = os.getenv("PAYMENT_API_KEY", "")
 
 # In-memory job storage (in production, use a proper database)
 job_storage = {}
@@ -87,21 +89,46 @@ def hash_input_data(input_data: dict) -> str:
     data_str = json.dumps(input_data, sort_keys=True)
     return hashlib.sha256(data_str.encode()).hexdigest()
 
-def generate_signature(data: str) -> str:
-    """Generate Ed25519 signature (placeholder - implement with actual crypto)"""
-    # In production, implement proper Ed25519 signing
-    return hashlib.sha256(f"signature_{data}".encode()).hexdigest()
+def generate_signature(data: str, seller_skey: str = None) -> str:
+    """
+    Generate Ed25519 signature for result submission
+    
+    Args:
+        data: Data to sign
+        seller_skey: Seller's secret key (optional, from env if not provided)
+    
+    Returns:
+        Hex-encoded signature
+    """
+    # In production, implement proper Ed25519 signing with nacl or cryptography library
+    # For now, return a placeholder that indicates signing is needed
+    if not seller_skey:
+        seller_skey = os.getenv("SELLER_SKEY", "")
+    
+    if not seller_skey:
+        logger.warning("SELLER_SKEY not set, using placeholder signature")
+        return hashlib.sha256(f"signature_{data}".encode()).hexdigest()
+    
+    # TODO: Implement actual Ed25519 signing
+    # from nacl.signing import SigningKey
+    # signing_key = SigningKey(bytes.fromhex(seller_skey))
+    # signed = signing_key.sign(data.encode())
+    # return signed.signature.hex()
+    
+    # Placeholder for now
+    return hashlib.sha256(f"signature_{data}_{seller_skey}".encode()).hexdigest()
 
 async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[str, Any]:
     """
     MIP-003 Compliant: Start a job on the remote crew
+    Integrates with Masumi Payment Service for real escrow-based job handling
     
     Args:
         identifier_from_purchaser: Purchaser-defined identifier
         input_data: Input data matching the schema
     
     Returns:
-        Job details with payment information
+        Job details with payment information from Masumi Payment Service
     """
     try:
         logger.info(f"Starting job for purchaser {identifier_from_purchaser}")
@@ -118,19 +145,58 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
         
         # Generate job details
         job_id = generate_job_id()
-        blockchain_identifier = generate_blockchain_identifier()
         current_time = int(time.time())
-        
-        # Payment timing (example values - adjust for production)
-        pay_by_time = current_time + 3600  # 1 hour to pay
-        submit_result_time = current_time + 7200  # 2 hours to submit result
-        unlock_time = current_time + 10800  # 3 hours to unlock payment
-        external_dispute_unlock_time = current_time + 86400  # 24 hours for disputes
         
         # Hash input data for integrity
         input_hash = hash_input_data(input_data)
         
-        # Store job information
+        # Call Masumi Payment Service to create job with real blockchain escrow
+        logger.info(f"Calling Masumi Payment Service to create job {job_id}")
+        
+        payment_request = {
+            "agentIdentifier": agent_identifier,
+            "sellerVKey": seller_vkey,
+            "identifierFromPurchaser": identifier_from_purchaser,
+            "inputHash": input_hash,
+            "price": 500  # 500 credits
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {"Content-Type": "application/json"}
+                if PAYMENT_API_KEY:
+                    headers["Authorization"] = f"Bearer {PAYMENT_API_KEY}"
+                
+                async with session.post(
+                    f"{MASUMI_PAYMENT_URL}/create-job",
+                    json=payment_request,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Payment Service error: {response.status} - {error_text}")
+                        raise ValueError(f"Payment Service returned {response.status}: {error_text}")
+                    
+                    payment_response = await response.json()
+                    logger.info(f"Payment Service response: {payment_response}")
+                    
+                    # Extract blockchain details from Payment Service response
+                    blockchain_identifier = payment_response.get("blockchainIdentifier")
+                    pay_by_time = payment_response.get("payByTime")
+                    submit_result_time = payment_response.get("submitResultTime")
+                    unlock_time = payment_response.get("unlockTime")
+                    external_dispute_unlock_time = payment_response.get("externalDisputeUnlockTime")
+                    
+                    if not blockchain_identifier:
+                        raise ValueError("Payment Service did not return blockchainIdentifier")
+                    
+        except aiohttp.ClientError as e:
+            logger.error(f"Failed to connect to Payment Service: {e}")
+            raise ValueError(f"Could not connect to Masumi Payment Service at {MASUMI_PAYMENT_URL}: {e}")
+        
+        # Store job information with real blockchain identifier
         job_storage[job_id] = {
             "id": job_id,
             "identifier_from_purchaser": identifier_from_purchaser,
@@ -142,9 +208,9 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
             "result": None
         }
         
-        logger.info(f"Job {job_id} created successfully")
+        logger.info(f"Job {job_id} created successfully with blockchain ID: {blockchain_identifier}")
         
-        # Return MIP-003 compliant response with cleaned values
+        # Return MIP-003 compliant response with real values from Payment Service
         return {
             "id": job_id,
             "blockchainIdentifier": blockchain_identifier,
@@ -479,9 +545,58 @@ async def process_outreach_job(job_id: str) -> None:
                             "processingMetadata": data.get("processingMetadata", {})
                         }
                         
-                        job["status"] = "completed"
-                        job["result"] = json.dumps(formatted_result)
-                        logger.info(f"Job {job_id} completed successfully")
+                        result_json = json.dumps(formatted_result)
+                        
+                        # Submit result to Masumi Payment Service
+                        logger.info(f"Submitting result to Payment Service for job {job_id}")
+                        
+                        try:
+                            result_hash = hashlib.sha256(result_json.encode()).hexdigest()
+                            blockchain_identifier = job.get("blockchain_identifier")
+                            
+                            if not blockchain_identifier:
+                                logger.error(f"No blockchain identifier found for job {job_id}")
+                                job["status"] = "failed"
+                                job["result"] = "Missing blockchain identifier for result submission"
+                                return
+                            
+                            # Generate signature for result submission
+                            seller_skey = os.getenv("SELLER_SKEY", "").strip()
+                            signature = generate_signature(result_hash, seller_skey)
+                            
+                            submit_request = {
+                                "blockchainIdentifier": blockchain_identifier,
+                                "resultHash": result_hash,
+                                "signature": signature
+                            }
+                            
+                            headers = {"Content-Type": "application/json"}
+                            if PAYMENT_API_KEY:
+                                headers["Authorization"] = f"Bearer {PAYMENT_API_KEY}"
+                            
+                            async with aiohttp.ClientSession() as payment_session:
+                                async with payment_session.post(
+                                    f"{MASUMI_PAYMENT_URL}/submit-result",
+                                    json=submit_request,
+                                    headers=headers,
+                                    timeout=aiohttp.ClientTimeout(total=10)
+                                ) as payment_response:
+                                    
+                                    if payment_response.status == 200:
+                                        logger.info(f"Result submitted successfully to Payment Service for job {job_id}")
+                                        job["status"] = "completed"
+                                        job["result"] = result_json
+                                        logger.info(f"Job {job_id} completed successfully")
+                                    else:
+                                        error_text = await payment_response.text()
+                                        logger.error(f"Payment Service submit-result error: {payment_response.status} - {error_text}")
+                                        job["status"] = "failed"
+                                        job["result"] = f"Failed to submit result to Payment Service: {error_text}"
+                        
+                        except Exception as payment_error:
+                            logger.error(f"Error submitting result to Payment Service: {payment_error}")
+                            job["status"] = "failed"
+                            job["result"] = f"Payment Service submission error: {str(payment_error)}"
                     else:
                         job["status"] = "failed"
                         job["result"] = f"Outreach processing failed: {result.get('error', {}).get('message', 'Unknown error')}"
