@@ -304,7 +304,7 @@ async def provide_input(job_id: str, status_id: str, input_data: dict) -> Dict[s
     job["status"] = "running"
     
     return {
-        "inputHash": input_hash,
+        "input_hash": input_hash,
         "signature": signature
     }
 

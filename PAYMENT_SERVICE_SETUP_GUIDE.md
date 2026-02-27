@@ -15,6 +15,7 @@ cd masumi-services-dev-quickstart
 cp .env.example .env
 ```
 
+
 Edit `.env` file:
 ```bash
 # Network Configuration

@@ -59,7 +59,7 @@ class ProvideInputRequest(BaseModel):
 
 class ProvideInputResponse(BaseModel):
     """MIP-003 compliant response for /provide_input endpoint"""
-    inputHash: str
+    input_hash: str
     signature: str
 
 class AvailabilityResponse(BaseModel):
