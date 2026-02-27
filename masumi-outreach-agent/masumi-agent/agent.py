@@ -224,18 +224,18 @@ async def start_job(identifier_from_purchaser: str, input_data: dict) -> Dict[st
         
         logger.info(f"Job {job_id} created successfully with blockchain ID: {blockchain_identifier}")
         
-        # Return MIP-003 compliant response with real values from Payment Service
+        # Return MIP-003 compliant response with snake_case fields
         return {
             "id": job_id,
-            "blockchainIdentifier": blockchain_identifier,
-            "payByTime": pay_by_time,
-            "submitResultTime": submit_result_time,
-            "unlockTime": unlock_time,
-            "externalDisputeUnlockTime": external_dispute_unlock_time,
-            "agentIdentifier": agent_identifier,
-            "sellerVKey": seller_vkey,
-            "identifierFromPurchaser": identifier_from_purchaser,
-            "inputHash": input_hash
+            "blockchain_identifier": blockchain_identifier,
+            "pay_by_time": pay_by_time,
+            "submit_result_time": submit_result_time,
+            "unlock_time": unlock_time,
+            "external_dispute_unlock_time": external_dispute_unlock_time,
+            "agent_identifier": agent_identifier,
+            "seller_vkey": seller_vkey,
+            "identifier_from_purchaser": identifier_from_purchaser,
+            "input_hash": input_hash
         }
         
     except Exception as e:

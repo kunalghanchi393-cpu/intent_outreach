@@ -33,17 +33,17 @@ class StartJobRequest(BaseModel):
     input_data: Dict[str, Any]
 
 class StartJobResponse(BaseModel):
-    """MIP-003 compliant response for /start_job endpoint"""
+    """MIP-003 compliant response for /start_job endpoint with snake_case fields"""
     id: str
-    blockchainIdentifier: str
-    payByTime: int
-    submitResultTime: int
-    unlockTime: int
-    externalDisputeUnlockTime: int
-    agentIdentifier: str
-    sellerVKey: str
-    identifierFromPurchaser: str
-    inputHash: str
+    blockchain_identifier: str
+    pay_by_time: int
+    submit_result_time: int
+    unlock_time: int
+    external_dispute_unlock_time: int
+    agent_identifier: str
+    seller_vkey: str
+    identifier_from_purchaser: str
+    input_hash: str
 
 class JobStatusResponse(BaseModel):
     """MIP-003 compliant response for /status endpoint"""
