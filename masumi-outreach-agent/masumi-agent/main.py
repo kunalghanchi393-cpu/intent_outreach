@@ -137,16 +137,6 @@ async def lifespan(app: FastAPI):
         try:
             await background_task
         except asyncio.CancelledError:
-            pass
-
-# FastAPI app
-app = FastAPI(
-    title="Intent-Driven Cold Outreach Agent",
-    description="MIP-003 Compliant Agentic Service for personalized outreach message generation",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
 # FastAPI app
 app = FastAPI(
     title="Intent-Driven Cold Outreach Agent",
