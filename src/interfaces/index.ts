@@ -65,7 +65,8 @@ export interface IOutputAssembler {
     confidence: ConfidenceLevel,
     reasoning: string,
     alternatives: [string, string],
-    metadata: ProcessingMetadata
+    metadata: ProcessingMetadata,
+    intentConfidenceScore?: number
   ): StructuredOutput;
   
   generateAlternativeMessages(

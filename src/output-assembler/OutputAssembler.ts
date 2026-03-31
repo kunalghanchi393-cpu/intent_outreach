@@ -19,41 +19,51 @@ import {
   MessageStrategy,
   IntentHypothesis,
   ProspectData,
+  IntentSignal,
   StrategyType,
   CallToActionLevel,
 } from '../types';
+import { MessageGenerator } from './MessageGenerator';
+
+// Re-export so ReasoningAgent can import from here if needed
+export { MessageGenerator };
 
 export class OutputAssembler implements IOutputAssembler {
-  constructor(private messageGenerator: IMessageGenerator) {}
+  constructor(
+    private messageGenerator: IMessageGenerator,
+    private intentSignals: IntentSignal[] = []
+  ) {}
+
+  /** Call this before assembleOutput so timing logic has signal data. */
+  setSignals(signals: IntentSignal[]): void {
+    this.intentSignals = signals;
+  }
 
   assembleOutput(
     message: string,
     confidence: ConfidenceLevel,
     reasoning: string,
     alternatives: [string, string],
-    metadata: ProcessingMetadata
+    metadata: ProcessingMetadata,
+    intentConfidenceScore?: number
   ): StructuredOutput {
-    // Ensure internal reasoning concealment (Requirement 8.6)
     const concealedReasoning = this.concealInternalReasoning(reasoning);
-    
-    // Generate follow-up timing based on confidence (Requirement 8.5)
     const followUpTiming = this.suggestFollowUpTiming(confidence);
-    
-    // Clean metadata to remove internal details (Requirement 8.6)
     const cleanedMetadata = this.cleanProcessingMetadata(metadata);
 
     return {
-      intentConfidence: confidence, // Requirement 8.1
-      reasoningSummary: concealedReasoning, // Requirement 8.2
-      recommendedMessage: message, // Requirement 8.3
-      alternativeMessages: alternatives, // Requirement 8.4 - exactly 2 alternatives
-      suggestedFollowUpTiming: followUpTiming, // Requirement 8.5
+      intentConfidence: intentConfidenceScore ?? confidence, // numeric score when available
+      reasoningSummary: concealedReasoning,
+      recommendedMessage: message,
+      alternativeMessages: alternatives,
+      suggestedFollowUpTiming: followUpTiming,
       processingMetadata: cleanedMetadata,
     };
   }
 
   /**
-   * Generates exactly 2 alternative messages with different approaches
+   * Generates exactly 2 alternative messages (Messages 2 & 3) using the
+   * signal-driven three-message approach when MessageGenerator supports it.
    * Requirements: 8.4
    */
   generateAlternativeMessages(
@@ -62,21 +72,23 @@ export class OutputAssembler implements IOutputAssembler {
     prospectData: ProspectData,
     confidence: ConfidenceLevel
   ): [string, string] {
-    const alternativeStrategies = this.getAlternativeStrategies(originalStrategy, confidence);
-    
-    let alternative1 = this.messageGenerator.generateMessage(
-      alternativeStrategies[0],
-      hypothesis,
-      prospectData
-    );
-    
-    let alternative2 = this.messageGenerator.generateMessage(
-      alternativeStrategies[1],
-      hypothesis,
-      prospectData
-    );
+    // Use generateThreeMessages if available (new signal-driven path)
+    const gen = this.messageGenerator as MessageGenerator;
+    if (typeof gen.generateThreeMessages === 'function') {
+      const [, msg2, msg3] = gen.generateThreeMessages(
+        originalStrategy,
+        hypothesis,
+        prospectData,
+        this.intentSignals
+      );
+      return [msg2, msg3];
+    }
 
-    // Ensure alternatives are different by adding distinguishing elements if they're identical
+    // Fallback: legacy path
+    const alternativeStrategies = this.getAlternativeStrategies(originalStrategy, confidence);
+    let alternative1 = this.messageGenerator.generateMessage(alternativeStrategies[0], hypothesis, prospectData);
+    let alternative2 = this.messageGenerator.generateMessage(alternativeStrategies[1], hypothesis, prospectData);
+
     if (alternative1 === alternative2) {
       alternative1 = this.addDistinguishingElement(alternative1, 'conversational');
       alternative2 = this.addDistinguishingElement(alternative2, 'analytical');
@@ -108,20 +120,17 @@ export class OutputAssembler implements IOutputAssembler {
   }
 
   /**
-   * Suggests follow-up timing based on confidence level
+   * Suggests follow-up timing based on signal strength.
+   * Hot signals (funding, hiring spike): 3d
+   * Weak / no signals: 7d
    * Requirements: 8.5
    */
-  private suggestFollowUpTiming(confidence: ConfidenceLevel): FollowUpTiming {
-    switch (confidence) {
-      case ConfidenceLevel.HIGH:
-        return FollowUpTiming.ONE_WEEK; // High confidence warrants quicker follow-up
-      case ConfidenceLevel.MEDIUM:
-        return FollowUpTiming.TWO_WEEKS; // Medium confidence needs more time
-      case ConfidenceLevel.LOW:
-        return FollowUpTiming.ONE_MONTH; // Low confidence requires patient approach
-      default:
-        return FollowUpTiming.TWO_WEEKS;
-    }
+  private suggestFollowUpTiming(_confidence: ConfidenceLevel): FollowUpTiming {
+    const hotSignalTypes = ['funding_event', 'company_growth', 'job_change'];
+    const hasHotSignal = this.intentSignals.some(
+      s => s.relevanceScore >= 0.4 && hotSignalTypes.includes(s.type)
+    );
+    return hasHotSignal ? FollowUpTiming.IMMEDIATE : FollowUpTiming.ONE_WEEK;
   }
 
   /**
@@ -196,10 +205,10 @@ export class OutputAssembler implements IOutputAssembler {
       ];
       concealed = summaries[hash % summaries.length];
     } else {
-      // Ensure it's 1-2 sentences maximum (Requirement 8.2)
+      // Ensure it's 2–3 sentences maximum (spec requirement)
       const sentences = concealed.split(/[.!?]+/).filter(s => s.trim().length > 0);
-      if (sentences.length > 2) {
-        concealed = sentences.slice(0, 2).join('. ') + '.';
+      if (sentences.length > 3) {
+        concealed = sentences.slice(0, 3).join('. ') + '.';
       } else if (sentences.length > 0) {
         // Ensure proper sentence ending
         concealed = sentences.join('. ').trim();

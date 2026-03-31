@@ -1,13 +1,16 @@
 /**
- * MessageGenerator - Generates human-sounding outreach messages
- * 
- * Implements message generation with:
- * - 120-word limit enforcement
- * - Hypothesis-based relevance inclusion
- * - Buzzword and cliché avoidance
- * - Call-to-action restriction for non-High confidence
- * 
- * Requirements: 6.1, 6.3, 6.4, 6.5
+ * MessageGenerator — signal-driven, human-sounding outreach messages.
+ *
+ * Produces 3 structurally distinct messages per prospect:
+ *   Message 1: Lead with the signal (or industry context if low signal)
+ *   Message 2: Lead with the outcome (peer-to-peer, role-driven)
+ *   Message 3: Lead with a provocation (non-obvious tension point)
+ *
+ * Rules enforced:
+ * - 60–90 word limit per message
+ * - No banned openers or buzzwords
+ * - Case A (relevanceScore >= 0.4): use highest signal as core hook
+ * - Case B (all scores < 0.4 or empty): role + industry only, intentConfidence = 0.3
  */
 
 import { IMessageGenerator } from '../interfaces';
@@ -15,297 +18,286 @@ import {
   MessageStrategy,
   IntentHypothesis,
   ProspectData,
+  IntentSignal,
   StrategyType,
   CallToActionLevel,
-  ConfidenceLevel,
 } from '../types';
 
-export class MessageGenerator implements IMessageGenerator {
-  private readonly WORD_LIMIT = 120;
-  
-  // Common buzzwords and clichés to avoid
-  private readonly BUZZWORDS = [
-    'synergy', 'leverage', 'paradigm', 'disruptive', 'innovative',
-    'cutting-edge', 'revolutionary', 'game-changer', 'best-in-class',
-    'world-class', 'industry-leading', 'next-generation', 'state-of-the-art',
-    'turnkey', 'seamless', 'robust', 'scalable', 'enterprise-grade',
-    'mission-critical', 'value-add', 'low-hanging fruit', 'circle back',
-    'touch base', 'move the needle', 'boil the ocean', 'think outside the box'
-  ];
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-  private readonly SALES_CLICHES = [
-    'i hope this email finds you well',
-    'i wanted to reach out',
-    'i hope you don\'t mind me reaching out',
-    'i came across your profile',
-    'i thought you might be interested',
-    'quick question for you',
-    'i\'d love to pick your brain',
-    'do you have 15 minutes',
-    'are you the right person to speak with',
-    'i don\'t want to take up too much of your time'
-  ];
+const WORD_MIN = 60;
+const WORD_MAX = 90;
 
-  generateMessage(
-    strategy: MessageStrategy,
-    hypothesis: IntentHypothesis,
-    prospectData: ProspectData
-  ): string {
-    const messageComponents = this.buildMessageComponents(strategy, hypothesis, prospectData);
-    let message = this.assembleMessage(messageComponents);
-    
-    // Ensure word limit compliance
-    message = this.enforceWordLimit(message);
-    
-    // Validate against buzzwords and clichés
-    message = this.removeBuzzwordsAndCliches(message);
-    
-    return message;
+const BANNED_OPENERS = [
+  'i came across',
+  'i wanted to reach out',
+  'hope this finds you',
+  'i hope this email finds you',
+  'i thought you might be interested',
+  "i don't want to take up too much of your time",
+];
+
+const BANNED_PHRASES = [
+  'quick chat',
+  'would love to connect',
+  'this might be relevant',
+  'synergies',
+  'synergy',
+  'leverage',
+  'paradigm',
+  'disruptive',
+  'cutting-edge',
+  'revolutionary',
+  'game-changer',
+  'best-in-class',
+  'world-class',
+  'industry-leading',
+  'next-generation',
+  'state-of-the-art',
+  'seamless',
+  'robust',
+  'scalable',
+  'mission-critical',
+  'value-add',
+  'circle back',
+  'touch base',
+  'move the needle',
+  'think outside the box',
+  'pick your brain',
+];
+
+// ─── Signal naturalisation ────────────────────────────────────────────────────
+
+/**
+ * Converts a raw signal description into a natural, human-sounding reference.
+ * e.g. "funding_event detected" → "the recent funding round"
+ */
+function naturaliseSignal(signal: IntentSignal): string {
+  const desc = signal.description.toLowerCase();
+  const type = signal.type.toLowerCase();
+
+  if (type.includes('funding') || desc.includes('funding') || desc.includes('raised') || desc.includes('series')) {
+    return signal.description.replace(/funding[_\s]event\s*(detected)?/i, '').trim() || 'the recent funding round';
+  }
+  if (type.includes('job_change') || desc.includes('joined') || desc.includes('promoted') || desc.includes('new role')) {
+    return signal.description.replace(/job[_\s]change\s*(detected)?/i, '').trim() || 'the recent leadership change';
+  }
+  if (type.includes('company_growth') || desc.includes('hiring') || desc.includes('headcount') || desc.includes('expansion')) {
+    return signal.description.replace(/company[_\s]growth\s*(detected)?/i, '').trim() || 'the hiring push';
+  }
+  if (type.includes('technology') || desc.includes('tech') || desc.includes('platform') || desc.includes('migration')) {
+    return signal.description.replace(/technology[_\s]adoption\s*(detected)?/i, '').trim() || 'the tech stack shift';
+  }
+  if (type.includes('industry_trend') || desc.includes('trend') || desc.includes('market')) {
+    return signal.description.replace(/industry[_\s]trend\s*(detected)?/i, '').trim() || 'the shift happening across the industry';
   }
 
-  private buildMessageComponents(
-    strategy: MessageStrategy,
-    hypothesis: IntentHypothesis,
-    prospectData: ProspectData
-  ): MessageComponents {
-    const greeting = this.generateGreeting(prospectData);
-    const relevanceStatement = this.generateRelevanceStatement(hypothesis, prospectData);
-    const valueProposition = this.generateValueProposition(strategy, hypothesis, prospectData);
-    const callToAction = this.generateCallToAction(strategy);
-    const closing = this.generateClosing();
-
-    return {
-      greeting,
-      relevanceStatement,
-      valueProposition,
-      callToAction,
-      closing,
-    };
-  }
-
-  private generateGreeting(prospectData: ProspectData): string {
-    const name = prospectData.contactDetails.name.split(' ')[0];
-    return `Hi ${name},`;
-  }
-
-  private generateRelevanceStatement(
-    hypothesis: IntentHypothesis,
-    prospectData: ProspectData
-  ): string {
-    // Include hypothesis-based relevance (Requirement 6.3)
-    const primaryReason = hypothesis.primaryReason;
-    const companyName = prospectData.companyContext.name;
-    
-    // Create a natural connection based on the hypothesis
-    if (primaryReason.toLowerCase().includes('funding') || primaryReason.toLowerCase().includes('growth')) {
-      return `I noticed ${companyName}'s recent growth momentum and thought it might be relevant to your role as ${prospectData.role}.`;
-    } else if (primaryReason.toLowerCase().includes('technology') || primaryReason.toLowerCase().includes('adoption')) {
-      return `Given ${companyName}'s technology initiatives, I thought this might be timely for your work in ${prospectData.role}.`;
-    } else if (primaryReason.toLowerCase().includes('job') || primaryReason.toLowerCase().includes('role')) {
-      return `Congratulations on your role at ${companyName}. I thought this might be relevant as you settle into your position.`;
-    } else {
-      return `I came across ${companyName} and thought this might be relevant to your work as ${prospectData.role}.`;
-    }
-  }
-
-  private generateValueProposition(
-    strategy: MessageStrategy,
-    hypothesis: IntentHypothesis,
-    prospectData: ProspectData
-  ): string {
-    const companyName = prospectData.companyContext.name;
-    
-    // Implement grounded value proposition validation (Requirement 10.3)
-    // Ensure we don't exaggerate or fabricate claims
-    
-    switch (strategy.type) {
-      case StrategyType.DIRECT_VALUE_ALIGNMENT:
-        // Avoid exaggerated claims, stay grounded in hypothesis
-        return `Based on ${hypothesis.primaryReason.toLowerCase()}, there may be alignment with what we're seeing other ${prospectData.companyContext.industry} companies consider.`;
-        
-      case StrategyType.INSIGHT_LED_OBSERVATION:
-        // Provide conservative insights without overstating capabilities
-        return `I've observed similar patterns in the ${prospectData.companyContext.industry} space, and companies like ${companyName} sometimes find value in exploring this area.`;
-        
-      case StrategyType.SOFT_CURIOSITY:
-        // Acknowledge uncertainty appropriately (Requirement 10.4)
-        return `I'm curious about how ${companyName} approaches this area, as it might be relevant given your current context, though I recognize every situation is unique.`;
-        
-      default:
-        return `This might be worth exploring given ${companyName}'s current situation, though I understand priorities can vary.`;
-    }
-  }
-
-  private generateCallToAction(strategy: MessageStrategy): string {
-    // Implement call-to-action restriction for non-High confidence (Requirement 6.5)
-    // Apply safety prioritization over persuasiveness (Requirement 10.5)
-    if (strategy.callToActionLevel === CallToActionLevel.NONE) {
-      return 'Would this be worth a brief conversation, if the timing seems right?';
-    } else if (strategy.callToActionLevel === CallToActionLevel.SOFT) {
-      return 'If this resonates, I\'d be happy to share some insights, though no pressure if the timing isn\'t right.';
-    } else if (strategy.callToActionLevel === CallToActionLevel.DIRECT) {
-      return 'Would you be open to a brief call this week to discuss how this might apply to your situation?';
-    }
-    
-    return 'Let me know if this would be worth exploring further, when the timing works for you.';
-  }
-
-  private generateClosing(): string {
-    return 'Best regards';
-  }
-
-  private assembleMessage(components: MessageComponents): string {
-    return [
-      components.greeting,
-      '',
-      components.relevanceStatement,
-      '',
-      components.valueProposition,
-      '',
-      components.callToAction,
-      '',
-      components.closing,
-    ].join('\n');
-  }
-
-  private enforceWordLimit(message: string): string {
-    const words = message.split(/\s+/).filter(word => word.length > 0);
-    
-    if (words.length <= this.WORD_LIMIT) {
-      return message;
-    }
-
-    // Trim to word limit while preserving sentence structure
-    const trimmedWords = words.slice(0, this.WORD_LIMIT);
-    let trimmedMessage = trimmedWords.join(' ');
-    
-    // Ensure we end on a complete sentence if possible
-    const lastSentenceEnd = Math.max(
-      trimmedMessage.lastIndexOf('.'),
-      trimmedMessage.lastIndexOf('?'),
-      trimmedMessage.lastIndexOf('!')
-    );
-    
-    if (lastSentenceEnd > trimmedMessage.length * 0.8) {
-      trimmedMessage = trimmedMessage.substring(0, lastSentenceEnd + 1);
-    }
-    
-    return trimmedMessage;
-  }
-
-  private removeBuzzwordsAndCliches(message: string): string {
-    let cleanMessage = message;
-    
-    // Remove buzzwords (case-insensitive)
-    this.BUZZWORDS.forEach(buzzword => {
-      const regex = new RegExp(`\\b${buzzword}\\b`, 'gi');
-      cleanMessage = cleanMessage.replace(regex, this.getBuzzwordReplacement(buzzword));
-    });
-    
-    // Remove sales clichés (case-insensitive)
-    this.SALES_CLICHES.forEach(cliche => {
-      const regex = new RegExp(cliche.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-      cleanMessage = cleanMessage.replace(regex, this.getCliqueReplacement(cliche));
-    });
-    
-    return cleanMessage;
-  }
-
-  private getBuzzwordReplacement(buzzword: string): string {
-    const replacements: Record<string, string> = {
-      'synergy': 'collaboration',
-      'leverage': 'use',
-      'paradigm': 'approach',
-      'disruptive': 'impactful',
-      'innovative': 'new',
-      'cutting-edge': 'advanced',
-      'revolutionary': 'significant',
-      'game-changer': 'improvement',
-      'best-in-class': 'high-quality',
-      'world-class': 'excellent',
-      'industry-leading': 'established',
-      'next-generation': 'modern',
-      'state-of-the-art': 'current',
-      'turnkey': 'complete',
-      'seamless': 'smooth',
-      'robust': 'reliable',
-      'scalable': 'flexible',
-      'enterprise-grade': 'professional',
-      'mission-critical': 'important',
-      'value-add': 'benefit',
-      'low-hanging fruit': 'easy wins',
-      'circle back': 'follow up',
-      'touch base': 'connect',
-      'move the needle': 'make progress',
-      'boil the ocean': 'tackle everything',
-      'think outside the box': 'be creative'
-    };
-    
-    return replacements[buzzword.toLowerCase()] || buzzword;
-  }
-
-  private getCliqueReplacement(cliche: string): string {
-    // For clichés, we typically want to remove them entirely or replace with more natural language
-    const replacements: Record<string, string> = {
-      'i hope this email finds you well': '',
-      'i wanted to reach out': '',
-      'i hope you don\'t mind me reaching out': '',
-      'i came across your profile': '',
-      'i thought you might be interested': '',
-      'quick question for you': '',
-      'i\'d love to pick your brain': 'I\'d appreciate your perspective',
-      'do you have 15 minutes': 'would you have time for a brief conversation',
-      'are you the right person to speak with': '',
-      'i don\'t want to take up too much of your time': ''
-    };
-    
-    return replacements[cliche.toLowerCase()] || '';
-  }
-
-  // Helper method to count words in a message
-  public countWords(message: string): number {
-    return message.split(/\s+/).filter(word => word.length > 0).length;
-  }
-
-  // Helper method to check if message contains buzzwords
-  public containsBuzzwords(message: string): boolean {
-    const lowerMessage = message.toLowerCase();
-    return this.BUZZWORDS.some(buzzword => 
-      new RegExp(`\\b${buzzword}\\b`, 'i').test(lowerMessage)
-    );
-  }
-
-  // Helper method to check if message contains clichés
-  public containsCliches(message: string): boolean {
-    const lowerMessage = message.toLowerCase();
-    return this.SALES_CLICHES.some(cliche => 
-      lowerMessage.includes(cliche)
-    );
-  }
-
-  // Helper method to check if message has call-to-action for non-high confidence
-  public hasInappropriateCallToAction(message: string, strategy: MessageStrategy): boolean {
-    if (strategy.callToActionLevel === CallToActionLevel.NONE) {
-      const strongCallToActions = [
-        'let\'s schedule a call',
-        'book a meeting',
-        'set up a demo',
-        'hop on a call',
-        'jump on a call'
-      ];
-      
-      const lowerMessage = message.toLowerCase();
-      return strongCallToActions.some(cta => lowerMessage.includes(cta));
-    }
-    
-    return false;
-  }
+  return signal.description.replace(/[_]+/g, ' ').replace(/\s+detected\s*$/i, '').trim();
 }
 
-interface MessageComponents {
-  greeting: string;
-  relevanceStatement: string;
-  valueProposition: string;
-  callToAction: string;
-  closing: string;
+// ─── Word count & enforcement ─────────────────────────────────────────────────
+
+function countWords(text: string): number {
+  return text.split(/\s+/).filter(w => w.length > 0).length;
+}
+
+function enforceWordLimit(message: string): string {
+  const words = message.split(/\s+/).filter(w => w.length > 0);
+  if (words.length <= WORD_MAX) return message;
+
+  const trimmed = words.slice(0, WORD_MAX).join(' ');
+  const lastEnd = Math.max(trimmed.lastIndexOf('.'), trimmed.lastIndexOf('?'), trimmed.lastIndexOf('!'));
+  if (lastEnd > trimmed.length * 0.75) {
+    return trimmed.substring(0, lastEnd + 1);
+  }
+  return trimmed;
+}
+
+function padToMinWords(message: string, context: string): string {
+  if (countWords(message) >= WORD_MIN) return message;
+  return message + ` ${context}`;
+}
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
+
+function hasBannedOpener(message: string): boolean {
+  const lower = message.toLowerCase();
+  return BANNED_OPENERS.some(o => lower.startsWith(o));
+}
+
+function containsBannedPhrase(message: string): boolean {
+  const lower = message.toLowerCase();
+  return BANNED_PHRASES.some(p => lower.includes(p));
+}
+
+// ─── CTA helpers ──────────────────────────────────────────────────────────────
+
+function softCTA(ctaLevel: CallToActionLevel, firstName: string): string {
+  if (ctaLevel === CallToActionLevel.DIRECT) {
+    return `Worth a 20-minute call this week, ${firstName}?`;
+  }
+  if (ctaLevel === CallToActionLevel.SOFT) {
+    return `Happy to share what we're seeing if it's useful — worth a look?`;
+  }
+  return `Curious whether this maps to anything on your end?`;
+}
+
+// ─── Main class ───────────────────────────────────────────────────────────────
+
+export class MessageGenerator implements IMessageGenerator {
+
+  /**
+   * IMessageGenerator contract entry point.
+   * Accepts optional signals via the last argument for Case A/B detection.
+   * When called from the legacy workflow (no signals), falls back to Case B.
+   */
+  generateMessage(
+    strategy: MessageStrategy,
+    _hypothesis: IntentHypothesis,
+    prospectData: ProspectData,
+    signals: IntentSignal[] = []
+  ): string {
+    const [msg1] = this.generateThreeMessages(strategy, _hypothesis, prospectData, signals);
+    return msg1;
+  }
+
+  /**
+   * Core method — generates all 3 structurally distinct messages.
+   *
+   * Case A (any signal relevanceScore >= 0.4): highest signal drives Message 1 & 3.
+   * Case B (empty or all scores < 0.4): role + industry only.
+   */
+  generateThreeMessages(
+    strategy: MessageStrategy,
+    _hypothesis: IntentHypothesis,
+    prospectData: ProspectData,
+    signals: IntentSignal[]
+  ): [string, string, string] {
+    const firstName = prospectData.contactDetails.name.split(' ')[0];
+    const { name: company, industry } = prospectData.companyContext;
+    const role = prospectData.role;
+    const cta = strategy.callToActionLevel;
+
+    // Case A / B detection
+    const strongSignals = signals.filter(s => s.relevanceScore >= 0.4);
+    const isHighSignal = strongSignals.length > 0;
+    const topSignal = isHighSignal
+      ? strongSignals.sort((a, b) => b.relevanceScore - a.relevanceScore)[0]
+      : null;
+    const signalRef = topSignal ? naturaliseSignal(topSignal) : null;
+
+    const msg1 = this.buildMessage1(firstName, company, industry, role, cta, isHighSignal, signalRef);
+    const msg2 = this.buildMessage2(firstName, company, industry, role, cta, strategy);
+    const msg3 = this.buildMessage3(firstName, company, industry, role, cta, isHighSignal, signalRef);
+
+    return [msg1, msg2, msg3];
+  }
+
+  // ── Message 1: Lead with the signal ──────────────────────────────────────
+
+  private buildMessage1(
+    firstName: string,
+    company: string,
+    industry: string,
+    role: string,
+    cta: CallToActionLevel,
+    isHighSignal: boolean,
+    signalRef: string | null
+  ): string {
+    const opening = isHighSignal && signalRef
+      // Case A — reference the signal naturally
+      ? `Saw ${signalRef} at ${company} — that kind of move usually puts ${role} teams under real pressure to deliver faster.`
+      // Case B — role + industry context only, no invented signals
+      : `${industry} companies at ${company}'s stage are rethinking how their ${role} function operates — the pressure to do more with less is real right now.`;
+
+    const isLeader = /head|vp|chief|director|president/i.test(role);
+    const body = `We work with ${isLeader ? 'leadership teams' : 'teams'} in ${industry} on exactly that — cutting the time between signal and action without adding headcount.`;
+
+    const raw = `${firstName}, ${opening} ${body} ${softCTA(cta, firstName)}`;
+    return this.finalise(raw, `We've seen this pattern across ${industry} and would be glad to share what's working.`);
+  }
+
+  // ── Message 2: Lead with the outcome (no signal in line 1) ───────────────
+
+  private buildMessage2(
+    firstName: string,
+    company: string,
+    industry: string,
+    role: string,
+    cta: CallToActionLevel,
+    strategy: MessageStrategy
+  ): string {
+    const outcomeMap: Record<StrategyType, string> = {
+      [StrategyType.DIRECT_VALUE_ALIGNMENT]:
+        `Most ${role}s I talk to in ${industry} are trying to close the gap between what the data says and what the team actually acts on.`,
+      [StrategyType.INSIGHT_LED_OBSERVATION]:
+        `The ${role} role in ${industry} has shifted — you're expected to own outcomes that used to sit across three different functions.`,
+      [StrategyType.SOFT_CURIOSITY]:
+        `Running a ${role} function at a company like ${company} means you're probably solving problems that don't have clean playbooks yet.`,
+    };
+
+    const opening = outcomeMap[strategy.type] ?? outcomeMap[StrategyType.SOFT_CURIOSITY];
+    const body = `We help ${industry} teams build the infrastructure to move faster on that — without the usual six-month implementation drag.`;
+
+    const raw = `${firstName}, ${opening} ${body} ${softCTA(cta, firstName)}`;
+    return this.finalise(raw, `Happy to share a concrete example if it's useful.`);
+  }
+
+  // ── Message 3: Lead with a provocation ───────────────────────────────────
+
+  private buildMessage3(
+    firstName: string,
+    company: string,
+    industry: string,
+    role: string,
+    cta: CallToActionLevel,
+    isHighSignal: boolean,
+    signalRef: string | null
+  ): string {
+    const opening = isHighSignal && signalRef
+      ? `${company}'s ${signalRef} looks like an opportunity from the outside — but from where you sit as ${role}, it probably just means more to coordinate with less margin for error.`
+      : `The ${industry} companies that struggle most aren't the ones with bad strategy — they're the ones where the ${role} function is still running on processes built for a smaller version of the company.`;
+
+    const body = `That gap between current process and current scale is exactly where we spend our time.`;
+
+    const raw = `${firstName}, ${opening} ${body} ${softCTA(cta, firstName)}`;
+    return this.finalise(raw, `Worth a conversation if any of this lands.`);
+  }
+
+  // ── Finalise: enforce limits, strip banned phrases, pad ──────────────────
+
+  private finalise(message: string, padSentence: string): string {
+    let msg = enforceWordLimit(message);
+    msg = padToMinWords(msg, padSentence);
+    msg = enforceWordLimit(msg);
+
+    BANNED_PHRASES.forEach(phrase => {
+      const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      msg = msg.replace(new RegExp(escaped, 'gi'), '');
+    });
+
+    return msg.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  // ── Public helpers (tests & authenticity filter) ──────────────────────────
+
+  public countWords(message: string): number {
+    return countWords(message);
+  }
+
+  public containsBuzzwords(message: string): boolean {
+    return containsBannedPhrase(message);
+  }
+
+  public containsCliches(message: string): boolean {
+    return hasBannedOpener(message);
+  }
+
+  public hasInappropriateCallToAction(message: string, strategy: MessageStrategy): boolean {
+    if (strategy.callToActionLevel === CallToActionLevel.NONE) {
+      const hardCTAs = ['schedule a call', 'book a meeting', 'set up a demo', 'hop on a call', 'jump on a call'];
+      return hardCTAs.some(c => message.toLowerCase().includes(c));
+    }
+    return false;
+  }
 }

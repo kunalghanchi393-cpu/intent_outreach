@@ -105,10 +105,13 @@ export class ReasoningAgent implements IReasoningAgent {
         () => this.strategySelector.selectStrategy(confidence)
       );
 
-      // Step 6: Message Generation (Requirement 9.1, 9.2)
+      // Step 6: Message Generation — pass signals so Case A/B is applied
       const message = await this.executeStep(
         'message_generation',
-        () => this.messageGenerator.generateMessage(strategy, hypothesis, prospectData)
+        () => {
+          const gen = this.messageGenerator as { generateMessage: (s: MessageStrategy, h: IntentHypothesis, p: ProspectData, signals?: IntentSignal[]) => string };
+          return gen.generateMessage(strategy, hypothesis, prospectData, intentSignals);
+        }
       );
 
       // Step 7: Authenticity & Spam Self-Evaluation + Output Assembly (Requirement 9.1, 9.2)
@@ -129,14 +132,27 @@ export class ReasoningAgent implements IReasoningAgent {
         () => {
           const executionTime = Date.now() - startTime;
           const metadata = this.createProcessingMetadata(executionTime);
-          const reasoningSummary = this.generateReasoningSummary(hypothesis, confidence);
-          
+          const reasoningSummary = this.generateReasoningSummary(hypothesis, confidence, intentSignals, prospectData);
+
+          // Pass signals to assembler so timing and alternatives are signal-aware
+          const assembler = this.outputAssembler as { setSignals?: (s: IntentSignal[]) => void };
+          if (typeof assembler.setSignals === 'function') {
+            assembler.setSignals(intentSignals);
+          }
+
+          // Compute numeric intentConfidence from top signal score (Case A/B)
+          const strongSignals = intentSignals.filter(s => s.relevanceScore >= 0.4);
+          const intentConfidenceScore = strongSignals.length > 0
+            ? Math.max(...strongSignals.map(s => s.relevanceScore))
+            : 0.3;
+
           return this.outputAssembler.assembleOutput(
             finalMessage,
             confidence,
             reasoningSummary,
             alternatives,
-            metadata
+            metadata,
+            intentConfidenceScore
           );
         }
       );
@@ -223,16 +239,28 @@ export class ReasoningAgent implements IReasoningAgent {
   }
 
   /**
-   * Generates reasoning summary for output
+   * Generates a WHY-focused reasoning summary (2–3 sentences).
+   * Explains: why this person, what signal drove it, what outcome we're targeting.
    */
   private generateReasoningSummary(
     hypothesis: IntentHypothesis,
-    confidence: ConfidenceLevel
+    confidence: ConfidenceLevel,
+    signals: IntentSignal[],
+    prospectData: ProspectData
   ): string {
-    const confidenceText = confidence.toLowerCase();
-    const primaryReason = hypothesis.primaryReason;
-    
-    return `${confidenceText} confidence assessment based on available signals. ${primaryReason}`;
+    const strongSignals = signals.filter(s => s.relevanceScore >= 0.4);
+    const topSignal = strongSignals.sort((a, b) => b.relevanceScore - a.relevanceScore)[0];
+    const role = prospectData.role;
+    const company = prospectData.companyContext.name;
+    const industry = prospectData.companyContext.industry;
+
+    if (topSignal) {
+      const signalDesc = topSignal.description.replace(/[_]+/g, ' ').replace(/\s*detected\s*$/i, '').trim();
+      return `${company}'s ${signalDesc} makes this a timely moment to reach out to their ${role} — this kind of event typically creates immediate pressure on the team to execute faster. The outreach targets the operational gap that usually opens up after this type of signal. Goal: start a conversation about how we can reduce time-to-action without adding headcount.`;
+    }
+
+    // Case B: low signal
+    return `Low signal confidence — outreach based on role and industry fit only. ${role} functions in ${industry} are under consistent pressure to deliver more with leaner teams, making this a relevant cold approach. The goal is to surface a pain point that's likely present even without a specific trigger event.`;
   }
 
   /**

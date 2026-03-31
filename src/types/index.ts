@@ -38,10 +38,10 @@ export enum CallToActionLevel {
 }
 
 export enum FollowUpTiming {
-  IMMEDIATE = 'immediate',
-  ONE_WEEK = 'one_week',
-  TWO_WEEKS = 'two_weeks',
-  ONE_MONTH = 'one_month',
+  IMMEDIATE = '3d',       // Hot signals: funding, hiring spike
+  ONE_WEEK = '7d',        // Weak / no signals
+  TWO_WEEKS = '14d',
+  ONE_MONTH = '30d',
 }
 
 export interface ContactDetails {
@@ -108,8 +108,8 @@ export interface AuditLogEntry {
 }
 
 export interface StructuredOutput {
-  intentConfidence: ConfidenceLevel;
-  reasoningSummary: string; // 1-2 sentences
+  intentConfidence: ConfidenceLevel | number; // numeric score (0–1) or enum label
+  reasoningSummary: string; // 2–3 sentences: why this person, what signal, what outcome
   recommendedMessage: string;
   alternativeMessages: [string, string]; // exactly 2 alternatives
   suggestedFollowUpTiming: FollowUpTiming;
