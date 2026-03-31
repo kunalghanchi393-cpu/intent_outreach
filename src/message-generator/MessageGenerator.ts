@@ -272,7 +272,7 @@ export class MessageGenerator implements IMessageGenerator {
     msg = enforceWordLimit(msg);
 
     BANNED_PHRASES.forEach(phrase => {
-      const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, (char) => '\\' + char);
       msg = msg.replace(new RegExp(escaped, 'gi'), '');
     });
 
