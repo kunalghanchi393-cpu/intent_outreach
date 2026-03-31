@@ -123,7 +123,7 @@ export class OutputAssembler implements IOutputAssembler {
    * Requirements: 8.5
    */
   private suggestFollowUpTiming(_confidence: ConfidenceLevel): FollowUpTiming {
-    const hotSignalTypes = ['funding_event', 'company_growth', 'job_change'];
+    const hotSignalTypes = ['funding_event', 'company_growth', 'job_change', 'hiring_signal'];
     const hasHotSignal = this.intentSignals.some(
       s => s.relevanceScore >= 0.4 && hotSignalTypes.includes(s.type)
     );
