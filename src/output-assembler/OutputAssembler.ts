@@ -23,10 +23,7 @@ import {
   StrategyType,
   CallToActionLevel,
 } from '../types';
-import { MessageGenerator } from './MessageGenerator';
-
-// Re-export so ReasoningAgent can import from here if needed
-export { MessageGenerator };
+import { MessageGenerator } from '../message-generator/MessageGenerator';
 
 export class OutputAssembler implements IOutputAssembler {
   constructor(
