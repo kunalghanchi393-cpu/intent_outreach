@@ -307,6 +307,19 @@ function startServer(): void {
       console.log(`🔍 Verbose logging: enabled`);
       console.log(`⏱️  Processing timeout: ${PROCESSING_TIMEOUT}ms`);
     }
+
+    // Keep-alive: ping /health every 4 minutes to prevent Railway sleep
+    const SELF_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : `http://localhost:${PORT}`;
+
+    setInterval(() => {
+      http.get(`${SELF_URL}/health`, (res) => {
+        console.log(`💓 Keep-alive ping: ${res.statusCode}`);
+      }).on('error', () => {
+        // Silently ignore — service may be restarting
+      });
+    }, 4 * 60 * 1000); // every 4 minutes
   });
   
   server.on('error', (error) => {
