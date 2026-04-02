@@ -16,7 +16,7 @@ import {
 } from '../types';
 
 export class InputValidator implements IInputValidator {
-  private static readonly MIN_INTENT_SIGNALS = 2;
+  private static readonly MIN_INTENT_SIGNALS = 1;
   private static readonly MAX_SIGNAL_AGE_DAYS = 365; // 1 year
 
   /**
@@ -175,7 +175,7 @@ export class InputValidator implements IInputValidator {
       return;
     }
 
-    // Requirement 1.1: At least 2 intent signals required
+    // At least 1 intent signal required (Case B handles empty/weak signals gracefully)
     if (intentSignals.length < InputValidator.MIN_INTENT_SIGNALS) {
       errors.push({
         field: 'intentSignals',
