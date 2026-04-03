@@ -314,7 +314,8 @@ function startServer(): void {
       : `http://localhost:${PORT}`;
 
     setInterval(() => {
-      http.get(`${SELF_URL}/health`, (res) => {
+      const lib = SELF_URL.startsWith('https') ? require('https') : http;
+      lib.get(`${SELF_URL}/health`, (res: http.IncomingMessage) => {
         console.log(`💓 Keep-alive ping: ${res.statusCode}`);
       }).on('error', () => {
         // Silently ignore — service may be restarting
